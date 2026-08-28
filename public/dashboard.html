@@ -13105,15 +13105,26 @@ document.addEventListener('click', e => {
    small floating button rather than wired into the existing top bar, so
    this patch doesn't have to touch renderUserBar()'s markup. */
 (function () {
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:80;display:flex;gap:8px';
+
+  var pwBtn = document.createElement('a');
+  pwBtn.href = '/account';
+  pwBtn.textContent = 'Change password';
+  pwBtn.style.cssText = 'padding:8px 14px;border-radius:8px;border:1px solid #DDE4F0;background:#fff;color:#0E2E63;font:600 12.5px/1 Inter,sans-serif;cursor:pointer;box-shadow:0 6px 18px rgba(14,46,99,.12);text-decoration:none;display:inline-flex;align-items:center';
+
   var btn = document.createElement('button');
   btn.textContent = 'Log out';
-  btn.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:80;padding:8px 14px;border-radius:8px;border:1px solid #DDE4F0;background:#fff;color:#0E2E63;font:600 12.5px/1 Inter,sans-serif;cursor:pointer;box-shadow:0 6px 18px rgba(14,46,99,.12)';
+  btn.style.cssText = 'padding:8px 14px;border-radius:8px;border:1px solid #DDE4F0;background:#fff;color:#0E2E63;font:600 12.5px/1 Inter,sans-serif;cursor:pointer;box-shadow:0 6px 18px rgba(14,46,99,.12)';
   btn.onclick = function () {
     fetch('/api/auth/logout', { method: 'POST' }).then(function () {
       window.location.href = '/login';
     });
   };
-  document.body.appendChild(btn);
+
+  wrap.appendChild(pwBtn);
+  wrap.appendChild(btn);
+  document.body.appendChild(wrap);
 })();
 </script>
 </body>

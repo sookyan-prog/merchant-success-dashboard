@@ -1024,12 +1024,46 @@ const CR_COLS = ['month','mrrNet','mrrNetPct','mrrChurn','mrrRetain','storeNet',
 const CONSOLE_SNAPSHOT = '26 Aug 2026';
 const CONSOLE_SCOPE = 'ESMY, all squads';
 const CONSOLE_URL = 'https://console.easystore.pink/reports/retention?period=monthly&region=z1';
+/* The figures below (CONSOLE_RETENTION) are a fallback only - the real
+   source is the console_retention table, refreshed from /admin/console-data
+   whenever someone pastes a fresh "copy table" from the console. Whatever
+   loadConsoleRetention() pulls in at boot takes priority; this hardcoded
+   array only kicks in if that fetch fails (offline, brand-new deploy
+   before the DB has anything, etc.) so the page never shows nothing. */
+let LIVE_CONSOLE_RETENTION = null;
+let LIVE_CONSOLE_UPDATED_AT = null;
+async function loadConsoleRetention() {
+  try {
+    const res = await fetch('/api/console-retention');
+    const data = await res.json();
+    if (data && Array.isArray(data.rows) && data.rows.length) {
+      LIVE_CONSOLE_RETENTION = data.rows;
+      LIVE_CONSOLE_UPDATED_AT = data.rows[0].updatedAt || null;
+    }
+  } catch (e) {}
+}
 function cr(mk) {
+  if (LIVE_CONSOLE_RETENTION) {
+    const live = LIVE_CONSOLE_RETENTION.find(r => r.month === mk);
+    if (live) return live;
+  }
   const row = CONSOLE_RETENTION.filter(r => r[0] === mk)[0];
   if (!row) return null;
   const o = {}; CR_COLS.forEach((c, i) => (o[c] = row[i])); return o;
 }
-function crMonths() { return CONSOLE_RETENTION.map(r => r[0]); }
+function crMonths() {
+  if (LIVE_CONSOLE_RETENTION) return LIVE_CONSOLE_RETENTION.map(r => r.month).slice().sort().reverse();
+  return CONSOLE_RETENTION.map(r => r[0]);
+}
+/* Freshness label shown wherever CONSOLE_SNAPSHOT used to be hardcoded -
+   now reflects whenever someone last pasted an update, not a fixed date. */
+function consoleSnapshotLabel() {
+  if (LIVE_CONSOLE_UPDATED_AT) {
+    const d = new Date(LIVE_CONSOLE_UPDATED_AT);
+    if (!isNaN(d)) return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  return CONSOLE_SNAPSHOT;
+}
 /* ---- data: September 96, real (still used by the Upgrade candidate ladder) ---- */
 /* ══════════════════════════════════════════════════════════════════════════
    SEPTEMBER 2026 RETENTION CAMPAIGN · real data
@@ -7660,7 +7694,7 @@ function renderIncentive() {
 
 
     <div class="setup-step" style="border-left-color:var(--amber)"><h3>Team figures</h3>
-      <p>Both come from the <a href="${CONSOLE_URL}" target="_blank" rel="noopener" style="color:var(--blue);font-weight:600">console retention report</a> (${CONSOLE_SCOPE}), read ${CONSOLE_SNAPSHOT}. Override either if finance restates it.</p>
+      <p>Both come from the <a href="${CONSOLE_URL}" target="_blank" rel="noopener" style="color:var(--blue);font-weight:600">console retention report</a> (${CONSOLE_SCOPE}), read ${consoleSnapshotLabel()}. Override either if finance restates it.</p>
       <div class="form-grid form-2">
         <div class="form-group"><label>Retention GR for ${monthLabel(incMonth)} (RM)</label>
         <input id="inc-rev" type="number" step="0.01" value="${t.override || ''}" placeholder="${t.auto ? 'console says ' + Math.round(t.auto) : 'e.g. 557652'}">
@@ -8040,7 +8074,7 @@ function renderReportsOverview() {
 
   document.getElementById('page-reports-overview').innerHTML =
     reportHead('Overview', 'The three streams at a glance', '',
-      'Console · <b>' + CONSOLE_SCOPE + '</b><br><span style="font-size:11px">read ' + CONSOLE_SNAPSHOT + '</span>')
+      'Console · <b>' + CONSOLE_SCOPE + '</b><br><span style="font-size:11px">read ' + consoleSnapshotLabel() + '</span>')
     + `<div class="cx-dates" style="margin:-4px 0 16px">
         ${crMonths().slice(0, 8).map(m => `<button class="cx-date" aria-pressed="${mk === m}" onclick="setChurnMonth('${m}')">
           <b>${monthLabel(m)}</b><span>${rm((cr(m) || {}).retentionGr)} GR</span></button>`).join('')}
@@ -10789,7 +10823,7 @@ function renderCampaignTarget() {
           ${closed != null ? `
           <div style="font-size:22px;font-family:'Poppins',sans-serif;color:var(--navy)">${rm(closed)}<span style="color:var(--muted);font-size:13px"> of ${rm(s.campaignTarget)}</span></div>
           <div style="background:var(--bg);border-radius:8px;height:10px;margin-top:10px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--green)"></div></div>
-          <p style="font-size:11.5px;color:var(--muted);margin:8px 0 0">Same Retention GR figure as <button class="lnk" onclick="go('reports-overview')">Reports · Overview</button>, read from the console retention report (${CONSOLE_SCOPE}), ${CONSOLE_SNAPSHOT}.</p>`
+          <p style="font-size:11.5px;color:var(--muted);margin:8px 0 0">Same Retention GR figure as <button class="lnk" onclick="go('reports-overview')">Reports · Overview</button>, read from the console retention report (${CONSOLE_SCOPE}), ${consoleSnapshotLabel()}.</p>`
           : `<div class="blocked">No console retention figure for ${monthLabel(s.campaignMonth)} yet - it'll show here once the console publishes it. ${s.campaignMonth > monthKey(todayKey()) ? "That's expected for a month that hasn't happened yet." : ''}</div>`}
         </div>
       </div>
@@ -12834,6 +12868,7 @@ function renderUserBar() {
         <span class="tb-txt"><b>${esc(me.name)}</b><span class="tb-sees">${esc(me.role)}</span></span>
       </div>` +
     `<a class="tb-opt" href="/account" style="text-decoration:none;color:inherit;box-sizing:border-box"><span class="tb-txt"><b>Change password</b></span></a>` +
+    (mgr ? `<a class="tb-opt" href="/admin/console-data" style="text-decoration:none;color:inherit;box-sizing:border-box"><span class="tb-txt"><b>Update console data</b></span></a>` : '') +
     `<button class="tb-opt" onclick="realSignOut()" style="border:0;background:none;font:inherit;color:inherit;cursor:pointer"><span class="tb-txt"><b>Log out</b></span></button>`;
 }
 function realSignOut() {
@@ -13197,6 +13232,7 @@ async function loadRealIdentity() {
 /* ── init ── */
 (async function () {
   await loadRealIdentity();
+  await loadConsoleRetention();
   preLaunchReset();
   migrateAmiraRealStores();
   await ensureAugustLoaded();

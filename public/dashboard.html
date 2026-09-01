@@ -581,7 +581,7 @@ tbody tr:hover{background:#F7FAFF}
 <main class="main">
 
 <header class="tbar">
-  <div class="tb-note">Prototype: switch who you are signed in as</div>
+  <div class="tb-note" id="tbNote"></div>
   <div class="tb-bell-wrap tb-wrap">
     <button class="tb-bell" id="tbBell" onclick="toggleNotifMenu(event)" aria-label="Notifications">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
@@ -10575,6 +10575,70 @@ If you'd like, let me know which plan you would like to proceed and I can check 
       { Date: '22 Sep 2026', Topic: 'POS', Syllabus: '' },
     ],
   },
+  {
+    Title: 'Closing Ticket: Send September Deal',
+    Owner: 'Team',
+    WhatToDo: `1. Share the message below in the merchant's language
+2. If they reply "50", send the second message in that same language
+3. Once the merchant replies, file it under "Upgrade" to keep tracking easy`,
+    MessageEN: `🔥 Deal of the Month: Enjoy up to 50% OFF when you upgrade, renew, or extend your EasyStore plan this September!
+Reply "50" to find out more! 👀`,
+    MessageCN: `🔥 本月限时优惠：这个九月，升级、续订或延长您的 EasyStore 配套，即可享有高达 50% 折扣！
+回复 "50" 了解更多 👀`,
+    MessageMY: `🔥 Promosi Bulan Ini: Nikmati diskaun sehingga 50% apabila anda upgrade, renew atau extend pelan EasyStore anda pada September ini!
+Balas "50" untuk mengetahui lebih lanjut 👀`,
+    Message2EN: `Thanks for your interest! 😊
+
+Here are the details of our 50% Renewal Promotion 🎉
+
+Simply renew or extend your current EasyStore plan for 3 years to enjoy 50% OFF your subscription fee.
+
+This promotion applies regardless of which EasyStore plan you're currently on.
+
+For example, if you're on the Standard Plan at RM249/month:
+Normal 3 Years Price: RM8,964
+50% Discount: RM4,482
+
+✨ Promo Price: RM4,482 for 3 years (excluding SST)
+
+That works out to only RM124.50/month on average, instead of RM249/month!
+
+If you're interested, let me know which plan you'd like to proceed with and I can check the exact 3 year promotional price for you 😊`,
+    Message2CN: `感谢您的兴趣！😊
+
+以下是我们这次 50% 续订优惠的详情 🎉
+
+只需将您目前的 EasyStore 配套续订或延长至 3 年，即可享有订阅费用 50% 折扣！
+
+无论您目前使用的是哪一个 EasyStore 配套，都可以享有这项优惠。
+
+举个例子，如果您目前使用的是 Standard Plan，每月 RM249：
+3 年原价：RM8,964
+50% 折扣：RM4,482
+
+✨ 优惠价：3 年仅需 RM4,482（未含 SST）
+
+平均下来每个月只需 RM124.50，原本则是 RM249/月！
+
+如果您有兴趣，可以告诉我您想继续使用或升级至哪个配套，我可以帮您计算准确的 3 年优惠价格 😊`,
+    Message2MY: `Terima kasih atas minat anda! 😊
+
+Berikut adalah butiran untuk Promosi Pembaharuan 50% kami 🎉
+
+Anda hanya perlu renew atau extend pelan EasyStore semasa anda untuk tempoh 3 tahun untuk menikmati diskaun 50% bagi yuran langganan.
+
+Promosi ini terbuka kepada semua pelan EasyStore, tidak kira pelan yang anda sedang gunakan sekarang.
+
+Sebagai contoh, jika anda menggunakan Standard Plan pada harga RM249/bulan:
+Harga Normal 3 Tahun: RM8,964
+Diskaun 50%: RM4,482
+
+✨ Harga Promosi: Hanya RM4,482 untuk 3 tahun (tidak termasuk SST)
+
+Secara purata, anda hanya membayar RM124.50/bulan, berbanding RM249/bulan!
+
+Jika anda berminat, beritahu saya pelan yang anda ingin teruskan atau upgrade, dan saya boleh semak harga promosi tepat untuk 3 tahun bagi anda 😊`,
+  },
 ];
 /* Retired activities - not needed for this campaign. Matched by their
    original title rather than position or count, so removing them cleans up
@@ -10598,7 +10662,7 @@ function mergeWebinars(seedArr, oldArr) {
    picks up the fix instead of being stuck with whatever first loaded. Owner,
    Status, Due and Notes are real progress and are always carried forward;
    only the content fields get refreshed, and only up to this version. */
-const CAMPAIGN_SEED_VERSION = 6;
+const CAMPAIGN_SEED_VERSION = 7;
 function campaignActivities() {
   let rows = getData('campaignActivities');
   if (rows.some(r => RETIRED_ACTIVITY_TITLES.includes(r.Title))) {
@@ -10609,29 +10673,47 @@ function campaignActivities() {
   if (!rows.length) {
     rows = CAMPAIGN_ACTIVITY_SEED.map(t => ({
       ID: uuid(), Title: t.Title, Owner: t.Owner || 'Team', Status: 'not_started', Due: '',
-      WhatToDo: t.WhatToDo, Message: t.Message, Message2: t.Message2 || '', Notes: '',
-      Schedule: t.Schedule || '', EmailSubject: t.EmailSubject || '', EmailBody: t.EmailBody || '',
+      WhatToDo: t.WhatToDo, Message: t.Message || '', Message2: t.Message2 || '',
+      MessageEN: t.MessageEN || '', MessageCN: t.MessageCN || '', MessageMY: t.MessageMY || '',
+      Message2EN: t.Message2EN || '', Message2CN: t.Message2CN || '', Message2MY: t.Message2MY || '',
+      Notes: '', Schedule: t.Schedule || '', EmailSubject: t.EmailSubject || '', EmailBody: t.EmailBody || '',
       ScheduleSent: {}, ScheduleNotified: {}, Webinars: mergeWebinars(t.Webinars, null),
     }));
     setData('campaignActivities', rows);
     s.campaignSeedVersion = CAMPAIGN_SEED_VERSION;
     saveSettings(s);
   } else if ((s.campaignSeedVersion || 0) < CAMPAIGN_SEED_VERSION) {
-    if (rows.length === CAMPAIGN_ACTIVITY_SEED.length) {
-      rows = rows.map((r, i) => {
+    const refreshFields = (r, t) => ({
+      ...r, Title: t.Title, WhatToDo: t.WhatToDo, Message: t.Message || '', Message2: t.Message2 || '',
+      MessageEN: t.MessageEN || '', MessageCN: t.MessageCN || '', MessageMY: t.MessageMY || '',
+      Message2EN: t.Message2EN || '', Message2CN: t.Message2CN || '', Message2MY: t.Message2MY || '',
+      Schedule: t.Schedule || '', EmailSubject: t.EmailSubject || '', EmailBody: t.EmailBody || '',
+      ScheduleSent: r.ScheduleSent || {}, ScheduleNotified: r.ScheduleNotified || {},
+      Webinars: mergeWebinars(t.Webinars, r.Webinars),
+    });
+    if (rows.length <= CAMPAIGN_ACTIVITY_SEED.length) {
+      /* Refresh whatever already lines up by position, then add any new
+         activities the seed has grown by since this browser last seeded -
+         new activities are always appended at the end, so this covers both
+         an unchanged team (same length) and a browser that's behind by one
+         or more campaign activities (fewer rows than the current seed). */
+      rows = rows.map((r, i) => (CAMPAIGN_ACTIVITY_SEED[i] ? refreshFields(r, CAMPAIGN_ACTIVITY_SEED[i]) : r));
+      for (let i = rows.length; i < CAMPAIGN_ACTIVITY_SEED.length; i++) {
         const t = CAMPAIGN_ACTIVITY_SEED[i];
-        return t
-          ? { ...r, Title: t.Title, WhatToDo: t.WhatToDo, Message: t.Message, Message2: t.Message2 || '',
-              Schedule: t.Schedule || '', EmailSubject: t.EmailSubject || '', EmailBody: t.EmailBody || '',
-              ScheduleSent: r.ScheduleSent || {}, ScheduleNotified: r.ScheduleNotified || {},
-              Webinars: mergeWebinars(t.Webinars, r.Webinars) }
-          : r;
-      });
+        rows.push({
+          ID: uuid(), Title: t.Title, Owner: t.Owner || 'Team', Status: 'not_started', Due: '',
+          WhatToDo: t.WhatToDo, Message: t.Message || '', Message2: t.Message2 || '',
+          MessageEN: t.MessageEN || '', MessageCN: t.MessageCN || '', MessageMY: t.MessageMY || '',
+          Message2EN: t.Message2EN || '', Message2CN: t.Message2CN || '', Message2MY: t.Message2MY || '',
+          Notes: '', Schedule: t.Schedule || '', EmailSubject: t.EmailSubject || '', EmailBody: t.EmailBody || '',
+          ScheduleSent: {}, ScheduleNotified: {}, Webinars: mergeWebinars(t.Webinars, null),
+        });
+      }
     } else {
       /* activities were added or removed by hand - too different to safely
          match up to the seed, so just make sure the newer fields exist. */
       rows.forEach(r => {
-        ['Schedule', 'EmailSubject', 'EmailBody', 'Message2'].forEach(f => { if (r[f] == null) r[f] = ''; });
+        ['Schedule', 'EmailSubject', 'EmailBody', 'Message2', 'MessageEN', 'MessageCN', 'MessageMY', 'Message2EN', 'Message2CN', 'Message2MY'].forEach(f => { if (r[f] == null) r[f] = ''; });
         if (r.ScheduleSent == null) r.ScheduleSent = {};
         if (r.ScheduleNotified == null) r.ScheduleNotified = {};
         if (r.Webinars == null) r.Webinars = [];
@@ -10904,6 +10986,29 @@ function renderActivity4Body(r) {
       <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}')">Remove activity</button>
     </div>`;
 }
+/* Activity 5 is the closing-ticket script, same "send this, then this if
+   they reply 50" shape as Activity 1's message cards, just tripled into the
+   three languages account managers actually close deals in. No Due/Status
+   fields, same reasoning as Activity 1 - it's copy to send, not a task with
+   a deadline. */
+function renderActivity5Body(r) {
+  return `
+    <div class="form-group"><label>What's the activity</label>
+      <input id="camp-t-${r.ID}" style="width:100%" value="${esc(r.Title)}" onchange="editCampaignActivity('${r.ID}','Title',this.value)"></div>
+    <div class="form-group"><label>What to do</label>
+      <textarea id="camp-w-${r.ID}" style="min-height:80px" onchange="editCampaignActivity('${r.ID}','WhatToDo',this.value)">${esc(r.WhatToDo)}</textarea></div>
+    <p style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:16px 0 8px">🔥 Closing ticket message</p>
+    ${msgCard('wa', '🇬🇧', 'English', 'camp-m-en-' + r.ID, r.ID, 'MessageEN', r.MessageEN)}
+    ${msgCard('wa', '🇨🇳', '中文', 'camp-m-cn-' + r.ID, r.ID, 'MessageCN', r.MessageCN)}
+    ${msgCard('wa', '🇲🇾', 'Bahasa Malaysia', 'camp-m-my-' + r.ID, r.ID, 'MessageMY', r.MessageMY)}
+    <p style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:16px 0 8px">If they reply "50"</p>
+    ${msgCard('br', '🇬🇧', 'English', 'camp-m2-en-' + r.ID, r.ID, 'Message2EN', r.Message2EN)}
+    ${msgCard('br', '🇨🇳', '中文', 'camp-m2-cn-' + r.ID, r.ID, 'Message2CN', r.Message2CN)}
+    ${msgCard('br', '🇲🇾', 'Bahasa Malaysia', 'camp-m2-my-' + r.ID, r.ID, 'Message2MY', r.Message2MY)}
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}')">Remove activity</button>
+    </div>`;
+}
 function renderGenericActivityBody(r, owners) {
   return `
     <div class="form-group"><label>What's the activity</label>
@@ -10970,7 +11075,8 @@ function renderCampaignActivities() {
       const isActivity2 = i === 1;
       const isActivity3 = i === 2;
       const isActivity4 = i === 3;
-      const noStatus = isActivity1 || isActivity2 || isActivity3 || isActivity4;
+      const isActivity5 = i === 4;
+      const noStatus = isActivity1 || isActivity2 || isActivity3 || isActivity4 || isActivity5;
       const statusInfo = CAMPAIGN_STATUS.find(s => s[0] === r.Status) || CAMPAIGN_STATUS[0];
       const col = CAMP_COLORS[i % CAMP_COLORS.length];
       const open = campOpenSet.has(r.ID);
@@ -10983,7 +11089,7 @@ function renderCampaignActivities() {
           <span class="chev">&#8250;</span>
         </button>
         <div class="camp-acc-body">
-          ${isActivity1 ? renderActivity1Body(r) : isActivity2 ? renderActivity2Body(r) : isActivity3 ? renderActivity3Body(r) : isActivity4 ? renderActivity4Body(r) : renderGenericActivityBody(r, owners)}
+          ${isActivity1 ? renderActivity1Body(r) : isActivity2 ? renderActivity2Body(r) : isActivity3 ? renderActivity3Body(r) : isActivity4 ? renderActivity4Body(r) : isActivity5 ? renderActivity5Body(r) : renderGenericActivityBody(r, owners)}
         </div>
       </div>`;
     }).join('')}`;
@@ -12696,23 +12802,21 @@ function renderProof() {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   SIGNED IN AS  (prototype only)
+   SIGNED IN AS
    ------------------------------------------------------------------------
-   A real build would get this from a login. Here it is a switcher, so the
-   difference between what a lead sees and what an account manager sees can be
-   demonstrated in one file rather than two. Switching changes three things at
-   once: which pages exist, whose day opens, and whose evidence is visible.
+   Identity now comes from the real login (see loadRealIdentity() near the
+   boot code below), which sets myAM/role from the server session before
+   this ever renders. No switcher - what this shows is who is actually
+   signed in, and it can't be changed from here.
    ══════════════════════════════════════════════════════════════════════════ */
-function personas() {
-  return [{ key: 'lead', name: 'Sook Yan', role: 'Merchant Success lead', manager: true, sees: 'Everything, including Team today and the whole team\'s files' }]
-    .concat(peopleList().map(p => ({
-      key: p.key, name: p.name, role: p.role, manager: false,
-      sees: 'Their own day and their own files. No Team today.',
-    })));
-}
 function currentPersona() {
-  const all = personas();
-  return all.filter(p => p.name === canonAM(myAM))[0] || all[0];
+  const mgr = isManager();
+  const own = peopleList().filter(p => p.name === canonAM(myAM))[0];
+  return {
+    name: canonAM(myAM) || myAM || 'Signed in',
+    manager: mgr,
+    role: mgr ? 'Merchant Success lead' : (own ? own.role : 'Account manager'),
+  };
 }
 function initials(n) { return n.split(' ').map(x => x[0]).slice(0, 2).join(''); }
 
@@ -12725,11 +12829,17 @@ function renderUserBar() {
     <span class="tb-caret">▼</span>`;
   document.getElementById('tbMenu').innerHTML =
     `<div class="tb-h">Signed in as</div>` +
-    personas().map(p => `<button class="tb-opt" aria-pressed="${p.name === me.name}" onclick="switchUser('${p.key}')">
-        <span class="tb-av ${p.manager ? 'mgr' : ''}">${initials(p.name)}</span>
-        <span class="tb-txt"><b>${esc(p.name)}</b><span class="tb-sees">${esc(p.sees)}</span></span>
-      </button>`).join('') +
-    `<div class="tb-foot">Switching is a prototype convenience. There is no login here, so this decides what the interface offers, not what anyone is permitted to open.</div>`;
+    `<div class="tb-opt" style="cursor:default">
+        <span class="tb-av ${mgr ? 'mgr' : ''}">${initials(me.name)}</span>
+        <span class="tb-txt"><b>${esc(me.name)}</b><span class="tb-sees">${esc(me.role)}</span></span>
+      </div>` +
+    `<a class="tb-opt" href="/account" style="text-decoration:none;color:inherit;box-sizing:border-box"><span class="tb-txt"><b>Change password</b></span></a>` +
+    `<button class="tb-opt" onclick="realSignOut()" style="border:0;background:none;font:inherit;color:inherit;cursor:pointer"><span class="tb-txt"><b>Log out</b></span></button>`;
+}
+function realSignOut() {
+  fetch('/api/auth/logout', { method: 'POST' }).then(function () {
+    window.location.href = '/login';
+  });
 }
 function toggleUserMenu(e) {
   e.stopPropagation();
@@ -12776,20 +12886,6 @@ function timeAgo(iso) {
   const hrs = Math.round(mins / 60);
   if (hrs < 24) return hrs + 'h ago';
   return Math.round(hrs / 24) + 'd ago';
-}
-function switchUser(key) {
-  const p = personas().filter(x => x.key === key)[0];
-  if (!p) return;
-  const s = getSettings();
-  s.myAM = p.name;
-  s.role = p.manager ? 'manager' : 'am';
-  saveSettings(s);
-  myAM = p.name;
-  const own = peopleList().filter(x => x.name === p.name)[0];
-  cur = own ? own.key : 'cavan';
-  navOpen = new Set(['reports', 'team', 'retention', 'campaign']);
-  closeUserMenu();
-  go(p.manager ? 'reports-churn' : 'day');
 }
 /* ══════════════════════════════════════════════════════════════════════════
  SIDEBAR TREE · ROUTER · BADGES · EVENTS · INIT
@@ -13076,9 +13172,31 @@ document.addEventListener('click', e => {
   }
 });
 
+/* Pulls who is actually signed in from the real login session and makes
+   that the source of truth for myAM/role, instead of whatever was last
+   picked in the old prototype switcher (now removed). Runs before anything
+   else in boot, since renderNav/renderUserBar/go() all read myAM. If the
+   session lookup fails for any reason, falls back to whatever was already
+   in localStorage rather than leaving the app in a broken state. */
+async function loadRealIdentity() {
+  try {
+    const res = await fetch('/api/auth/me');
+    const data = await res.json();
+    if (data && data.user) {
+      const s = getSettings();
+      s.myAM = data.user.name;
+      s.role = data.user.role === 'manager' ? 'manager' : 'am';
+      saveSettings(s);
+      myAM = data.user.name;
+      return;
+    }
+  } catch (e) {}
+  myAM = getSettings().myAM || '';
+}
+
 /* ── init ── */
 (async function () {
-  myAM = getSettings().myAM || '';
+  await loadRealIdentity();
   preLaunchReset();
   migrateAmiraRealStores();
   await ensureAugustLoaded();
@@ -13098,34 +13216,10 @@ document.addEventListener('click', e => {
   go(isManager() ? 'reports-overview' : 'day');
 })();
 
-/* Real sign-out, added when the login system went in - separate from the
-   old "switch who you are signed in as" prototype selector above, which
-   still exists for now but no longer decides who can get into the page at
-   all (the login gate in front of /dashboard.html does that). Kept as a
-   small floating button rather than wired into the existing top bar, so
-   this patch doesn't have to touch renderUserBar()'s markup. */
-(function () {
-  var wrap = document.createElement('div');
-  wrap.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:80;display:flex;gap:8px';
-
-  var pwBtn = document.createElement('a');
-  pwBtn.href = '/account';
-  pwBtn.textContent = 'Change password';
-  pwBtn.style.cssText = 'padding:8px 14px;border-radius:8px;border:1px solid #DDE4F0;background:#fff;color:#0E2E63;font:600 12.5px/1 Inter,sans-serif;cursor:pointer;box-shadow:0 6px 18px rgba(14,46,99,.12);text-decoration:none;display:inline-flex;align-items:center';
-
-  var btn = document.createElement('button');
-  btn.textContent = 'Log out';
-  btn.style.cssText = 'padding:8px 14px;border-radius:8px;border:1px solid #DDE4F0;background:#fff;color:#0E2E63;font:600 12.5px/1 Inter,sans-serif;cursor:pointer;box-shadow:0 6px 18px rgba(14,46,99,.12)';
-  btn.onclick = function () {
-    fetch('/api/auth/logout', { method: 'POST' }).then(function () {
-      window.location.href = '/login';
-    });
-  };
-
-  wrap.appendChild(pwBtn);
-  wrap.appendChild(btn);
-  document.body.appendChild(wrap);
-})();
+/* Real sign-out and change-password now live in the top bar's "Signed in
+   as" menu (see renderUserBar() above) instead of a separate floating
+   button, now that the old prototype persona switcher has been removed
+   from that same menu. */
 </script>
 </body>
 </html>

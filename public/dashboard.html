@@ -8065,7 +8065,13 @@ function renderReportsOverview() {
   const g = streamFigures(), s = churnStats();
   const mk = crMonths().includes(g.mk) ? g.mk : crMonths()[0];
   const c = cr(mk) || {};
-  const months = CONSOLE_RETENTION.map(r => r[0]).slice().reverse();
+  /* Live months only, and only this calendar year - the incentive bands reset
+     each January, so last year's tail (Sep-Dec) sitting in the chart just
+     pads it out with a year that's already settled. crMonths() is the live
+     source (was CONSOLE_RETENTION, the static fallback, which is why this
+     never picked up a fresh month like Sep 2026 no matter how recently it
+     had been imported). */
+  const months = crMonths().slice().reverse().filter(m => m.slice(0, 4) === todayKey().slice(0, 4));
   const metrics = ovMetrics(g);
   const M = metrics.filter(x => x.k === ovMetric)[0] || metrics[0];
   const idx = months.indexOf(mk);
@@ -8100,7 +8106,7 @@ function renderReportsOverview() {
         </div>
       </div>
 
-      <p class="sect">Twelve months, side by side</p>
+      <p class="sect">${months.length} month${months.length === 1 ? '' : 's'}, side by side</p>
       <div class="section">
         <div class="tbl-wrap"><table>
           <thead><tr><th>Month</th><th>Retention GR</th><th>MRR net churn</th><th>%</th><th>Churned</th><th>Retained</th><th>Stores net</th><th>Total stores</th><th>Monthly MRR</th><th>Upgraded</th></tr></thead>

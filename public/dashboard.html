@@ -4497,7 +4497,38 @@ async function deleteFromRemote(tab, id) {
   return { success: true };
 }
 
-/* ── seeding ── */
+/* ── seeding ──
+   AUG_DATA below is a fallback only, same idea as CONSOLE_RETENTION for the
+   retention numbers: the real source is the churn_stores table, refreshed
+   from /admin/churn-data whenever someone pastes a fresh "Churn Stores"
+   copy-table from the console. Whatever loadChurnStores() pulls in at boot
+   takes priority; AUG_DATA only kicks in if that fetch fails or the table
+   is still empty, so the churn queue never shows nothing. */
+let LIVE_CHURN_STORES = null;
+async function loadChurnStores() {
+  try {
+    const res = await fetch('/api/churn-stores');
+    const data = await res.json();
+    if (data && Array.isArray(data.rows) && data.rows.length) LIVE_CHURN_STORES = data.rows;
+  } catch (e) {}
+}
+/* The console's Churn Stores report has no account-manager column, so the
+   owner has to come from somewhere else - MERCHANTS_MASTER (the paid-store
+   pull) already carries one per store ID and is the same idea as
+   CONSOLE_NAMES/CONSOLE_CONTACTS being used to enrich bare IDs elsewhere. A
+   store that churned before the last MERCHANTS_MASTER pull won't be in it,
+   so this can come back blank - that's a real gap, not a bug, and shows up
+   as an unassigned row rather than a guessed owner. */
+const MERCHANT_AM_BY_ID = MERCHANTS_MASTER.reduce((m, r) => ((m[r[0]] = r[2]), m), {});
+/* Current + previous month only - matches both what the console report
+   itself shows one month at a time, and what the churn queue is scoped to
+   (SookYan asked for exactly this: this month plus the one before, not a
+   longer history). */
+function recentChurnMonths() {
+  const y = TODAY.getFullYear(), m = TODAY.getMonth();
+  const key = (yy, mm) => yy + '-' + String(mm + 1).padStart(2, '0');
+  return [key(y, m), m === 0 ? key(y - 1, 11) : key(y, m - 1)];
+}
 function augRow(a) {
   return {
     ID: uuid(),
@@ -4519,9 +4550,38 @@ function augRow(a) {
     'Updated At': new Date().toISOString(),
   };
 }
+function liveChurnRow(x) {
+  return {
+    ID: uuid(),
+    'Store ID': x.storeId,
+    'Account Name': CONSOLE_NAMES[x.storeId] || x.storeName,
+    Segment: '',
+    'Churn Date': x.expiryDate,
+    'Days Since Churn': daysSince(x.expiryDate),
+    AM: canonAM(MERCHANT_AM_BY_ID[x.storeId] || ''),
+    'Outreach Status': 'not-started',
+    'Last Contact': '',
+    'Win-Back Outcome': '',
+    'Survey Text (col R)': '',
+    Notes: x.cancelReason ? 'Cancel reason: ' + x.cancelReason : 'From console churn report, ' + monthLabel(x.month),
+    Phone: x.phone || '',
+    Email: x.email || '',
+    'Plan Type': cycleToPlanType(x.cycle || 1),
+    'Plan Tier': x.plan,
+    'Updated At': new Date().toISOString(),
+  };
+}
 async function ensureAugustLoaded() {
   const wb = getData('winback');
   const have = new Set(wb.map(r => String(r['Store ID']).trim()));
+  const months = recentChurnMonths();
+  const live = (LIVE_CHURN_STORES || []).filter(x => months.includes(x.month));
+  if (live.length) {
+    const missing = live.filter(x => !have.has(String(x.storeId)));
+    if (!missing.length) return 0;
+    setData('winback', [...missing.map(liveChurnRow), ...wb]);
+    return missing.length;
+  }
   const missing = AUG_DATA.filter(a => !have.has(a[0]));
   if (!missing.length) return 0;
   setData('winback', [...missing.map(augRow), ...wb]);
@@ -12875,6 +12935,7 @@ function renderUserBar() {
       </div>` +
     `<a class="tb-opt" href="/account" style="text-decoration:none;color:inherit;box-sizing:border-box"><span class="tb-txt"><b>Change password</b></span></a>` +
     (mgr ? `<a class="tb-opt" href="/admin/console-data" style="text-decoration:none;color:inherit;box-sizing:border-box"><span class="tb-txt"><b>Update console data</b></span></a>` : '') +
+    (mgr ? `<a class="tb-opt" href="/admin/churn-data" style="text-decoration:none;color:inherit;box-sizing:border-box"><span class="tb-txt"><b>Update churn queue data</b></span></a>` : '') +
     `<button class="tb-opt" onclick="realSignOut()" style="border:0;background:none;font:inherit;color:inherit;cursor:pointer"><span class="tb-txt"><b>Log out</b></span></button>`;
 }
 function realSignOut() {
@@ -13239,6 +13300,7 @@ async function loadRealIdentity() {
 (async function () {
   await loadRealIdentity();
   await loadConsoleRetention();
+  await loadChurnStores();
   preLaunchReset();
   migrateAmiraRealStores();
   await ensureAugustLoaded();

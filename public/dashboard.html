@@ -3893,6 +3893,11 @@ const SNAPSHOT_DATE = '12 Aug 2026';
 const TODAY = new Date();
 let _memSettings = null;
 const _memData = {};
+/* The shared, live-loaded Upgrade pipeline. See loadUpgrades() and the
+   'upgrades' special-case in getData()/setData() below. Starts empty so
+   nothing renders as "0 opportunities" before the fetch resolves; boot()
+   awaits loadUpgrades() before the first render(). */
+let LIVE_UPGRADES = [];
 
 /* ── clipboard ──
  navigator.clipboard needs a secure context and explicit permission, and both
@@ -3967,7 +3972,18 @@ function saveMyAM() {
   s.myAM = myAM;
   saveSettings(s);
 }
+/* 'upgrades' is special-cased here rather than touching every one of its
+   ~15 call sites across the Upgrade page, the Reports pages and the
+   Merchants directory: it now lives in the shared upgrades table (see
+   loadUpgrades()/LIVE_UPGRADES below), not localStorage, since a per-browser
+   pipeline meant one AM's opportunities were invisible to everyone else,
+   including a manager on her own machine. Reading it still returns a plain
+   array exactly as before, so every existing .filter()/.map() call site
+   keeps working untouched; only the handful of places that actually create,
+   edit or delete a row (saveUpgrade/upTick/delUpgrade) needed to change, to
+   also write through to the API. */
 function getData(k) {
+  if (k === 'upgrades') return LIVE_UPGRADES;
   if (_memData[k]) return _memData[k];
   try {
     const v = localStorage.getItem('ret2_' + k);
@@ -3976,6 +3992,7 @@ function getData(k) {
   return (_memData[k] = []);
 }
 function setData(k, a) {
+  if (k === 'upgrades') { LIVE_UPGRADES = a; return; }
   _memData[k] = a;
   try {
     localStorage.setItem('ret2_' + k, JSON.stringify(a));
@@ -4109,6 +4126,17 @@ const PLAN_OPTS = [
 /* ── account-manager aliases ──
  The console writes some people under a second name. Mapping them here means
  every view, count and queue agrees on one person. Editable in Settings. */
+/* 'Kian Ming' -> 'George Sim' is not a mistake to remove: the merchant
+   master data, the Upgrade seed and the older tracker exports all filed his
+   real book under the name "George Sim" (see the UPGRADE_SEED comment
+   "George Sim (Kian Ming)"), and no login called George Sim exists - Kian
+   Ming's real account is what all of that historical data actually belongs
+   to. This alias is what makes his real login resolve to that same book
+   everywhere canonAM() is used, instead of orphaning it. The confusing part
+   is downstream of here: amList (Settings > Team list) lists "Kian Ming"
+   and "George Sim" as if they were two separate, independently pickable
+   people, so a dropdown built from amList can't tell them apart - see the
+   Owner field fix in addUpgrade() for the actual bug this caused. */
 const AM_ALIAS_DEFAULT = { 'Choo Zhe Hong': 'Calvin Choo', 'Kian Ming': 'George Sim' };
 function amAlias() {
   const s = getSettings();
@@ -4512,6 +4540,28 @@ async function loadChurnStores() {
     if (data && Array.isArray(data.rows) && data.rows.length) LIVE_CHURN_STORES = data.rows;
   } catch (e) {}
 }
+
+/* Converts one /api/upgrades row (camelCase) into the row shape every
+   Upgrade call site already expects (the same PascalCase field names the
+   old localStorage rows used), so nothing downstream of getData('upgrades')
+   needed to change. */
+function liveUpgradeRow(x) {
+  return {
+    ID: x.id, Merchant: x.merchant, 'Store ID': x.storeId || '', AM: x.am,
+    Stage: x.stage, 'Closing Date': x.closingDate || '', Value: Number(x.value) || 0,
+    MRR: Number(x.mrr) || 0, Cycle: x.cycle || '12', Reason: x.reason || '',
+    'Plan From': x.planFrom || '', 'Plan To': x.planTo || '', Phone: x.phone || '',
+    F1: !!x.f1, F2: !!x.f2, F3: !!x.f3, Filed: x.filed || '', Notes: x.notes || '',
+    'Updated At': x.updatedAt || '',
+  };
+}
+async function loadUpgrades() {
+  try {
+    const res = await fetch('/api/upgrades');
+    const data = await res.json();
+    if (data && Array.isArray(data.rows)) LIVE_UPGRADES = data.rows.map(liveUpgradeRow);
+  } catch (e) {}
+}
 /* The console's Churn Stores report has no account-manager column, so the
    owner has to come from somewhere else - MERCHANTS_MASTER (the paid-store
    pull) already carries one per store ID and is the same idea as
@@ -4602,6 +4652,30 @@ function migrateAmiraRealStores() {
   s.amiraRealMigration = AMIRA_REAL_MIGRATION_VERSION;
   saveSettings(s);
 }
+/* ensureRiskSeeded() only fills in a Store ID the first time it's added, so
+   three of the eight auto-seeded risk rows (everyone but Amira Liyana's
+   five) went in with a blank AM before MERCHANT_AM_BY_ID existed to fall
+   back to - Bobbysan Supply (1301201) showing "unassigned" despite Astrid
+   Chen being its real owner in the merchant master list. Fixing the seed
+   function only helps a browser that hasn't seeded yet; anyone who already
+   has these rows needs this backfill to pick up the correct owner without
+   losing whatever else they've since typed onto the row. */
+const RISK_AM_BACKFILL_VERSION = 1;
+function backfillRiskOwners() {
+  const s = getSettings();
+  if ((s.riskAmBackfill || 0) >= RISK_AM_BACKFILL_VERSION) return;
+  let touched = false;
+  const rk = getData('risk').map(r => {
+    if (r['AM']) return r;
+    const found = MERCHANT_AM_BY_ID[String(r['Store ID']).trim()];
+    if (!found) return r;
+    touched = true;
+    return { ...r, AM: found };
+  });
+  if (touched) setData('risk', rk);
+  s.riskAmBackfill = RISK_AM_BACKFILL_VERSION;
+  saveSettings(s);
+}
 /* Launch cleanup, 28 Aug 2026 - wipes whatever time off/work-from-home
    bookings, incentive claims, notifications, My files proof (screenshots
    + call recordings), Business Health Check sessions, and Upgrade pipeline
@@ -4624,10 +4698,13 @@ function preLaunchReset() {
      browser would otherwise get them right back a few lines later. */
   setData('bhc', []);
   if (typeof BHC_SEED_VERSION !== 'undefined') s.bhcSeed = BHC_SEED_VERSION;
-  /* Upgrade pipeline: same idea - clear every opportunity and mark the seed
-     as already applied so ensureUpgradesSeeded() doesn't refill it right
-     back for a fresh browser. */
-  setData('upgrades', []);
+  /* Upgrade pipeline used to be cleared here too, back when it was seeded
+     into each browser's own localStorage. It now lives in the shared
+     upgrades table (loadUpgrades(), called earlier in boot) - real data
+     other people depend on, not per-browser test data - so a first-load
+     reset must never touch it. setData('upgrades', []) would only have
+     blanked this browser's in-memory copy for one render anyway, not the
+     database, but it's better not to call it at all. */
   if (typeof UPGRADE_SEED_VERSION !== 'undefined') s.upgradeSeed = UPGRADE_SEED_VERSION;
   s.preLaunchReset = PRE_LAUNCH_RESET_VERSION;
   saveSettings(s);
@@ -4646,7 +4723,13 @@ function preLaunchReset() {
 /* The eight stores the console confirms are still live. They are the real
  at-risk candidates. Login-gap days are deliberately left blank: that number
  is not in the snapshot, so the tier reads Healthy until it is typed in or
- the live feed supplies it. Nothing here is invented. */
+ the live feed supplies it. Nothing here is invented.
+ Owner: ACTIVE_STORES_AM only ever covered Amira Liyana's five - the other
+ three fall back to MERCHANT_AM_BY_ID (the same merchant-master lookup the
+ churn queue uses), which is the "owner already on record" the old comment
+ here promised but never actually read. Without this fallback these three
+ seed in with a blank AM and show as "unassigned" everywhere, even though
+ the real owner is sitting one table over. */
 function ensureRiskSeeded() {
   const rk = getData('risk');
   const have = new Set(rk.map(r => String(r['Store ID']).trim()));
@@ -4663,7 +4746,7 @@ function ensureRiskSeeded() {
         'Plan Tier': plan ? plan[0] : '',
         'Days Since Login': '',
         'Renewal Date': ACTIVE_STORES[sid],
-        AM: (typeof ACTIVE_STORES_AM !== 'undefined' && ACTIVE_STORES_AM[sid]) || '',
+        AM: (typeof ACTIVE_STORES_AM !== 'undefined' && ACTIVE_STORES_AM[sid]) || MERCHANT_AM_BY_ID[sid] || '',
         'Intervention Status': 'not-started',
         Outcome: '',
         'Last Action Date': '',
@@ -4947,6 +5030,20 @@ function buildQueue(am) {
   });
   q.sort((a, b) => a.pri - b.pri || a.sub - b.sub);
   return q;
+}
+
+/* How many days a merchant sits out of today's actionable batch once they've
+   been contacted AND evidenced - long enough that an AM isn't asked to
+   re-pitch someone who was messaged yesterday, short enough that an
+   unresolved merchant doesn't quietly fall off everyone's radar. They stay
+   in the full queue (badge counts, the Churn risk listing) the whole time;
+   this only holds them out of the "do this today" card. Tune the number
+   here if 3 days turns out to be too short or too long in practice. */
+const QUEUE_GRACE_DAYS = 3;
+function recentlyHandled(r) {
+  const last = r['Last Contact'] || r['Last Action Date'];
+  if (!last || !hasShot(r['ID'])) return false;
+  return daysSince(last) < QUEUE_GRACE_DAYS;
 }
 
 /* ══════════ ROW ACTIONS ══════════ */
@@ -6092,7 +6189,11 @@ function agendaFor(k, di) {
   const isAct = k === 'cavan';
   const out = [], add = x => { if (x) out.push(x); };
   const q = buildQueue(name);
-  const batch = q.slice(0, BATCH);
+  /* Recently-handled merchants (contacted + evidenced within the last
+     QUEUE_GRACE_DAYS days) sit out of today's card so the same batch does
+     not ask for a fresh screenshot every single day - they stay in the
+     underlying queue and resurface once the grace period lapses. */
+  const batch = q.filter(x => !recentlyHandled(x.row)).slice(0, BATCH);
 
   add(ticketCard('10:00', D.k === 'mon' ? (isAct ? '1h 30m' : '2h') : '1h 30m', D, 'am'));
 
@@ -6135,7 +6236,7 @@ function agendaFor(k, di) {
       : [['15:30', '1h 15m'], ['16:45', '1h']];
   pool.slice(0, slots.length).forEach((it, i) => { it.t = slots[i][0]; it.d = slots[i][1]; add(it); });
 
-  add(logCard('17:45', Math.max(0, q.length - BATCH)));
+  add(logCard('17:45', Math.max(0, q.length - batch.length)));
   return out.sort((a, b) => String(a.t).localeCompare(String(b.t)));
 }
 /* Keyed by the actual date, not the weekday. Keying on "mon" meant ticking
@@ -6834,7 +6935,11 @@ function upShowClosedAllTime() { upStageFilter = 'upgraded'; upWho = 'all'; upMo
 function upMonthLabelSel() { return upMonthSel === '__all__' ? 'all time' : monthLabel(upMonthSel); }
 
 function renderUpgrade() {
-  const mgr = isManager(), me = canonAM(myAM);
+  /* Real login name, not canonAM(myAM): the shared upgrades table keys "AM"
+     to whoever actually signed in (the server stamps it that way on
+     create), it does not carry over the older canonical alias some other,
+     still-local modules use. */
+  const mgr = isManager(), me = myAM;
   let all = getData('upgrades');
   if (!mgr) all = all.filter(r => r['AM'] === me);
   const people = [...new Set(getData('upgrades').map(r => r['AM']).filter(Boolean))].sort();
@@ -6931,10 +7036,22 @@ function renderUpgrade() {
     ${owners.map(block).join('') || `<div class="section"><div class="empty"><div class="big">Nothing here</div><p>${all.length ? 'Nothing matches this filter.' : 'Add the first opportunity.'}</p></div></div>`}
     <div class="alert alert-blue"><b>The target is revenue, not MRR.</b> Earned MRR is shown per row for reference; performance is measured on Excl SST value. <button class="lnk" onclick="go('performance')">See your month</button></div>`;
 }
-function upTick(id, n, val) {
+async function upTick(id, n, val) {
   const rows = getData('upgrades'); const r = rows.filter(x => x['ID'] === id)[0]; if (!r) return;
-  r['F' + n] = !!val; r['Updated At'] = new Date().toISOString();
-  setData('upgrades', rows);
+  const prev = r['F' + n];
+  r['F' + n] = !!val; r['Updated At'] = new Date().toISOString(); // optimistic; reverted below if the write fails
+  try {
+    const res = await fetch('/api/upgrades/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ['f' + n]: !!val }),
+    });
+    if (!res.ok) throw new Error('save failed');
+  } catch (e) {
+    r['F' + n] = prev;
+    render();
+    alert('Could not save that tick - check your connection and try again.');
+  }
 }
 function addUpgrade(id) {
   const rows = getData('upgrades'), r = id ? rows.filter(x => x['ID'] === id)[0] : null;
@@ -6950,7 +7067,21 @@ function addUpgrade(id) {
       <div class="form-group"><label>Merchant, name or store URL *</label>
         <input id="u-name" list="u-list" value="${esc(r ? r['Merchant'] : '')}" placeholder="e.g. kesouma.com" onchange="upNamePicked()">
         <datalist id="u-list">${merchants.map(m => `<option value="${esc(m['Account Name'] || m['Store ID'])}">`).join('')}</datalist></div>
-      <div class="form-group"><label>Owner</label><select id="u-am">${(getSettings().amList || []).map(a => `<option${(r ? r['AM'] : canonAM(myAM)) === a ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Owner</label>${isManager()
+        ? `<select id="u-am">${(getSettings().amList || []).map(a => `<option${(r ? r['AM'] : myAM) === a ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select>`
+        /* The Upgrade pipeline now lives in the shared upgrades table, keyed
+           to each person's real login name (the server stamps this itself
+           on create, see /api/upgrades - it never trusts the client for a
+           non-manager). An editable dropdown here was how opportunities
+           went missing before: amList lists some people's real name and
+           their older canonical alias as if they were two separate,
+           independently pickable people (e.g. Kian Ming's older records
+           are filed under "George Sim" - see AM_ALIAS_DEFAULT), so picking
+           your own name from the list could still save under the wrong
+           one. An AM only ever adds to their own book, so this is just a
+           label now, not a real choice. */
+        : `<input id="u-am" value="${esc(myAM)}" disabled style="background:var(--bg,#f4f6fb);color:var(--muted)">`
+      }</div>
     </div>
     <div class="form-grid form-2">
       <div class="form-group"><label>Store ID</label><input id="u-sid" value="${esc(r ? r['Store ID'] : '')}" placeholder="e.g. 707507"></div>
@@ -7000,42 +7131,73 @@ function upCalcMrr() {
   const m = cycleMonths(document.getElementById('u-cycle').value);
   if (v) document.getElementById('u-mrr').value = Math.round((v / m) * 100) / 100;
 }
-function saveUpgrade(id) {
+async function saveUpgrade(id) {
   const name = document.getElementById('u-name').value.trim();
   if (!name) { alert('Which merchant is this for?'); return; }
   const stage = document.getElementById('u-stage').value;
-  const rows = getData('upgrades');
-  let r = id ? rows.filter(x => x['ID'] === id)[0] : null;
+  const existing = id ? getData('upgrades').find(x => x['ID'] === id) : null;
+  const m = merchantRows().filter(x => (x['Account Name'] || '') === name)[0];
+  const sidTyped = document.getElementById('u-sid').value.trim();
+
+  const payload = {
+    merchant: name,
+    storeId: sidTyped || (existing ? existing['Store ID'] : '') || (m ? m['Store ID'] : ''),
+    phone: document.getElementById('u-phone').value.trim(),
+    am: document.getElementById('u-am').value,
+    planFrom: document.getElementById('u-from').value,
+    planTo: document.getElementById('u-to').value,
+    stage,
+    reason: document.getElementById('u-reason').value,
+    notes: document.getElementById('u-notes').value.trim(),
+  };
+  if (stage === 'upgraded') {
+    payload.closingDate = document.getElementById('u-date').value || todayKey();
+    payload.value = Number(document.getElementById('u-val').value) || 0;
+    payload.mrr = Number(document.getElementById('u-mrr').value) || 0;
+    if (!payload.mrr) { alert('An upgrade with no earned MRR cannot be counted. Fill in the value and cycle.'); return; }
+  }
   /* Filed is stamped once, the day the opportunity is first added - it is
      what puts a merchant under a given month's tab (an AM adding something
      on 2 Sept sees it under September 2026 from then on, whatever happens
      to it later), separate from Closing Date, which is when it actually
      won. Never touched again on later edits. */
-  if (!r) { r = { ID: uuid(), F1: false, F2: false, F3: false, Filed: todayKey() }; rows.unshift(r); }
-  const m = merchantRows().filter(x => (x['Account Name'] || '') === name)[0];
-  const sidTyped = document.getElementById('u-sid').value.trim();
-  Object.assign(r, {
-    Merchant: name, 'Store ID': sidTyped || r['Store ID'] || (m ? m['Store ID'] : ''),
-    Phone: document.getElementById('u-phone').value.trim(),
-    AM: document.getElementById('u-am').value,
-    'Plan From': document.getElementById('u-from').value,
-    'Plan To': document.getElementById('u-to').value,
-    Stage: stage, Reason: document.getElementById('u-reason').value,
-    Notes: document.getElementById('u-notes').value.trim(),
-    'Updated At': new Date().toISOString(),
-  });
-  if (stage === 'upgraded') {
-    r['Closing Date'] = document.getElementById('u-date').value || todayKey();
-    r['Value'] = Number(document.getElementById('u-val').value) || 0;
-    r['MRR'] = Number(document.getElementById('u-mrr').value) || 0;
-    if (!r['MRR']) { alert('An upgrade with no earned MRR cannot be counted. Fill in the value and cycle.'); return; }
+  if (!id) payload.filed = todayKey();
+
+  let res, data;
+  try {
+    res = await fetch(id ? '/api/upgrades/' + id : '/api/upgrades', {
+      method: id ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    data = await res.json().catch(() => ({}));
+  } catch (e) {
+    alert('Could not save that opportunity - check your connection and try again.');
+    return;
   }
+  if (!res.ok) { alert(data.error || 'Could not save that opportunity.'); return; }
+
+  const row = liveUpgradeRow(data.row);
+  const rows = getData('upgrades');
+  const i = rows.findIndex(x => x['ID'] === row.ID);
+  if (i >= 0) rows[i] = row; else rows.unshift(row);
   setData('upgrades', rows);
   closeModal();
   render();
 }
-function delUpgrade(id) {
+async function delUpgrade(id) {
   if (!confirm('Delete this opportunity?')) return;
+  try {
+    const res = await fetch('/api/upgrades/' + id, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || 'Could not delete that opportunity.');
+      return;
+    }
+  } catch (e) {
+    alert('Could not delete that opportunity - check your connection and try again.');
+    return;
+  }
   setData('upgrades', getData('upgrades').filter(r => r['ID'] !== id));
   closeModal(); render();
 }
@@ -12178,6 +12340,7 @@ async function syncAll() {
   migrateAmiraRealStores();
   await ensureAugustLoaded();
   ensureRiskSeeded();
+  backfillRiskOwners();
   render();
 }
 
@@ -13192,7 +13355,15 @@ function updateBadges() {
   setBadge('b-mer', merchantRows().length, true);
   setBadge('b-camp', campaignActivities().filter(a => a.Status !== 'done').length, true);
   setBadge('b-bhc', getData('bhc').filter(r => ['research', 'scored', 'outreach', 'scheduled'].includes(r['Stage'])).length, true);
-  setBadge('b-up', getData('upgrades').filter(r => UP_OPEN.includes(r['Stage'])).length, true);
+  /* AM-scoped for a non-manager, same as b-claim/b-proof below - otherwise
+     the sidebar number is everyone's open pipeline, not "yours", and can
+     look right by pure coincidence while the page itself (which is scoped
+     to r['AM'] === you) shows something completely different. Compared
+     against the real login name (myAM), not canonAM(myAM): the shared
+     upgrades table is keyed to real names throughout (the server stamps
+     it that way on create), it does not carry over the older canonical
+     alias some other, still-local modules use. */
+  setBadge('b-up', getData('upgrades').filter(r => UP_OPEN.includes(r['Stage']) && (isManager() || r['AM'] === myAM)).length, true);
   setBadge('b-claim', pendingClaimCount(isManager() ? null : canonAM(myAM)), true);
   setBadge('b-proof', (isManager() ? evidenceItems() : evidenceItems().filter(x => x.who === canonAM(myAM))).length, true);
   if (isManager())
@@ -13301,11 +13472,12 @@ async function loadRealIdentity() {
   await loadRealIdentity();
   await loadConsoleRetention();
   await loadChurnStores();
+  await loadUpgrades();
   preLaunchReset();
   migrateAmiraRealStores();
   await ensureAugustLoaded();
   ensureRiskSeeded();
-  ensureUpgradesSeeded();
+  backfillRiskOwners();
   ensureBhcSeeded();
   migrateIncSettings();
   campaignActivities(); /* seeds/migrates before the reminder check reads it */

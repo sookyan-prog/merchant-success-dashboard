@@ -3898,6 +3898,17 @@ const _memData = {};
    nothing renders as "0 opportunities" before the fetch resolves; boot()
    awaits loadUpgrades() before the first render(). */
 let LIVE_UPGRADES = [];
+/* Same idea for Time off/work-from-home. See loadTimeOff() and the
+   'timeoff' special-case in getData()/setData() below. */
+let LIVE_TIMEOFF = [];
+/* Same idea again for Campaign activities, Campaign contacts and
+   Escalations - see loadCampaignActivities()/loadCampaignContacts()/
+   loadEscalations() and the matching special-cases in getData()/setData()
+   below. campaignContacts is a single shared lookup object (store ID ->
+   phone/email overrides), not a list, so it starts as {} rather than []. */
+let LIVE_CAMPAIGN_ACTIVITIES = [];
+let LIVE_CAMPAIGN_CONTACTS = {};
+let LIVE_ESCALATIONS = [];
 
 /* ── clipboard ──
  navigator.clipboard needs a secure context and explicit permission, and both
@@ -3984,6 +3995,10 @@ function saveMyAM() {
    also write through to the API. */
 function getData(k) {
   if (k === 'upgrades') return LIVE_UPGRADES;
+  if (k === 'timeoff') return LIVE_TIMEOFF;
+  if (k === 'campaignActivities') return LIVE_CAMPAIGN_ACTIVITIES;
+  if (k === 'campaignContacts') return LIVE_CAMPAIGN_CONTACTS;
+  if (k === 'escalations') return LIVE_ESCALATIONS;
   if (_memData[k]) return _memData[k];
   try {
     const v = localStorage.getItem('ret2_' + k);
@@ -3991,8 +4006,40 @@ function getData(k) {
   } catch (e) {}
   return (_memData[k] = []);
 }
+/* Campaign activities and Escalations sync as a full-array "bulk replace" -
+   the server upserts every row given and deletes any existing row whose id
+   isn't in the set, so a shrinking array (a delete) propagates correctly
+   too. This mirrors how every existing call site already works: they all
+   pass setData() the complete, current array rather than a single changed
+   row, so hooking the sync in here needed no changes to any of them.
+   Campaign contacts is a single shared object instead, synced whole. All
+   three fire-and-forget: same light-touch error handling as loadUpgrades()
+   - a failed sync just means this browser's edit didn't reach the shared
+   copy this time, not a blocking error in the UI. */
+function syncCampaignActivities(rows) {
+  fetch('/api/campaign-activities', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows }),
+  }).catch(() => {});
+}
+function syncCampaignContacts(data) {
+  fetch('/api/campaign-contacts', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data }),
+  }).catch(() => {});
+}
+function syncEscalations(rows) {
+  fetch('/api/escalations', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows }),
+  }).catch(() => {});
+}
 function setData(k, a) {
   if (k === 'upgrades') { LIVE_UPGRADES = a; return; }
+  if (k === 'timeoff') { LIVE_TIMEOFF = a; return; }
+  if (k === 'campaignActivities') { LIVE_CAMPAIGN_ACTIVITIES = a; syncCampaignActivities(a); return; }
+  if (k === 'campaignContacts') { LIVE_CAMPAIGN_CONTACTS = a; syncCampaignContacts(a); return; }
+  if (k === 'escalations') { LIVE_ESCALATIONS = a; syncEscalations(a); return; }
   _memData[k] = a;
   try {
     localStorage.setItem('ret2_' + k, JSON.stringify(a));
@@ -4562,6 +4609,49 @@ async function loadUpgrades() {
     if (data && Array.isArray(data.rows)) LIVE_UPGRADES = data.rows.map(liveUpgradeRow);
   } catch (e) {}
 }
+
+/* Converts one /api/time-off row (camelCase) into the row shape every Time
+   off call site already expects. */
+function liveTimeOffRow(x) {
+  return {
+    ID: x.id, Person: x.person, Type: x.type, From: x.fromDate, To: x.toDate,
+    Covers: Array.isArray(x.covers) ? x.covers : [], Note: x.note || '',
+    Slack: x.slack || '', 'Updated At': x.updatedAt || '',
+  };
+}
+async function loadTimeOff() {
+  try {
+    const res = await fetch('/api/time-off');
+    const data = await res.json();
+    if (data && Array.isArray(data.rows)) LIVE_TIMEOFF = data.rows.map(liveTimeOffRow);
+  } catch (e) {}
+}
+
+/* Campaign activities and Escalations are stored server-side as whole-row
+   jsonb blobs (see migrations/007_campaign_and_escalations.sql) - the API
+   hands back each row exactly as this app already saved it, so unlike
+   Upgrades/Time off there's no camelCase-to-PascalCase mapping step here. */
+async function loadCampaignActivities() {
+  try {
+    const res = await fetch('/api/campaign-activities');
+    const data = await res.json();
+    if (data && Array.isArray(data.rows)) LIVE_CAMPAIGN_ACTIVITIES = data.rows;
+  } catch (e) {}
+}
+async function loadCampaignContacts() {
+  try {
+    const res = await fetch('/api/campaign-contacts');
+    const data = await res.json();
+    if (data && data.data && typeof data.data === 'object') LIVE_CAMPAIGN_CONTACTS = data.data;
+  } catch (e) {}
+}
+async function loadEscalations() {
+  try {
+    const res = await fetch('/api/escalations');
+    const data = await res.json();
+    if (data && Array.isArray(data.rows)) LIVE_ESCALATIONS = data.rows;
+  } catch (e) {}
+}
 /* The console's Churn Stores report has no account-manager column, so the
    owner has to come from somewhere else - MERCHANTS_MASTER (the paid-store
    pull) already carries one per store ID and is the same idea as
@@ -4689,7 +4779,11 @@ const PRE_LAUNCH_RESET_VERSION = 4;
 function preLaunchReset() {
   const s = getSettings();
   if ((s.preLaunchReset || 0) >= PRE_LAUNCH_RESET_VERSION) return;
-  setData('timeoff', []);
+  /* Time off/work-from-home used to be cleared here too, back when it was
+     per-browser localStorage. It now lives in the shared time_off table
+     (loadTimeOff(), called earlier in boot) - real bookings other people
+     depend on seeing, not per-browser test data - so a first-load reset
+     must never touch it. */
   setData('notifications', []);
   s.incClaims = {};
   /* Health check: clear every session and mark the seed as already applied
@@ -5032,18 +5126,16 @@ function buildQueue(am) {
   return q;
 }
 
-/* How many days a merchant sits out of today's actionable batch once they've
-   been contacted AND evidenced - long enough that an AM isn't asked to
-   re-pitch someone who was messaged yesterday, short enough that an
-   unresolved merchant doesn't quietly fall off everyone's radar. They stay
-   in the full queue (badge counts, the Churn risk listing) the whole time;
-   this only holds them out of the "do this today" card. Tune the number
-   here if 3 days turns out to be too short or too long in practice. */
-const QUEUE_GRACE_DAYS = 3;
+/* Once a merchant has been contacted AND evidenced, they stop taking a slot
+   in today's actionable batch - permanently, not for a few days and then
+   back. The next-highest-priority merchant still waiting on outreach fills
+   that slot instead, so the batch always moves forward rather than showing
+   the same handful on repeat. They stay in the full queue the whole time
+   (badge counts, the Churn risk listing) and only leave it for good once
+   actually won back, declined, or recovered - this just keeps them off the
+   "do this today" card once there's already a logged, evidenced touch. */
 function recentlyHandled(r) {
-  const last = r['Last Contact'] || r['Last Action Date'];
-  if (!last || !hasShot(r['ID'])) return false;
-  return daysSince(last) < QUEUE_GRACE_DAYS;
+  return !!(r['Last Contact'] || r['Last Action Date']) && hasShot(r['ID']);
 }
 
 /* ══════════ ROW ACTIONS ══════════ */
@@ -6189,10 +6281,9 @@ function agendaFor(k, di) {
   const isAct = k === 'cavan';
   const out = [], add = x => { if (x) out.push(x); };
   const q = buildQueue(name);
-  /* Recently-handled merchants (contacted + evidenced within the last
-     QUEUE_GRACE_DAYS days) sit out of today's card so the same batch does
-     not ask for a fresh screenshot every single day - they stay in the
-     underlying queue and resurface once the grace period lapses. */
+  /* Already-contacted-and-evidenced merchants sit out of today's card for
+     good, not just a few days, so the batch fills with the next merchant
+     still waiting on outreach instead of repeating the same names. */
   const batch = q.filter(x => !recentlyHandled(x.row)).slice(0, BATCH);
 
   add(ticketCard('10:00', D.k === 'mon' ? (isAct ? '1h 30m' : '2h') : '1h 30m', D, 'am'));
@@ -10035,7 +10126,7 @@ function lvSync() {
     ${fu.length ? `<br><span style="color:var(--amber)">${fu.length} follow-up${fu.length === 1 ? '' : 's'} due in the window.</span>` : ''}
     <br>${q} merchant${q === 1 ? '' : 's'} in the churn queue will pause rather than move to anyone else.</div>`;
 }
-function saveLeave() {
+async function saveLeave() {
   const from = document.getElementById('lv-from').value;
   const type = document.getElementById('lv-type').value;
   const isWfh = type === WFH_TYPE;
@@ -10050,48 +10141,73 @@ function saveLeave() {
     const clashes = leaveRows().filter(r => r['Person'] === who && r['Type'] === WFH_TYPE && bhcWeekOf(r['From']) === wk && r['ID'] !== lvEditId);
     if (clashes.length) {
       if (!confirm(who + ' already has a work-from-home day this week (' + clashes[0]['From'] + '). Replace it with ' + from + '?')) return;
+      for (const c of clashes) {
+        try { await fetch('/api/time-off/' + c['ID'], { method: 'DELETE' }); } catch (e) {}
+      }
       const clashIds = clashes.map(x => x['ID']);
       setData('timeoff', leaveRows().filter(r => !clashIds.includes(r['ID'])));
     }
   }
 
   const editingId = lvEditId;
-  const rows = leaveRows();
-  const existing = editingId ? rows.filter(r => r['ID'] === editingId)[0] : null;
-
+  const existing = editingId ? leaveRows().filter(r => r['ID'] === editingId)[0] : null;
   const prevCoverNames = existing ? coverNames(existing) : [];
-  const rec = existing || { ID: uuid() };
-  rec.Person = who;
-  rec.Type = type;
-  rec.From = from; rec.To = to;
-  rec.Covers = isWfh ? [] : lvCovers.map(c => ({ Person: c.Person, Channel: c.Channel }));
-  delete rec.Cover; /* superseded by Covers; drop so old/new shapes don't both linger on one record */
-  rec.Note = isWfh ? '' : document.getElementById('lv-note').value.trim();
-  if (!existing) rec.Slack = '';
+  const covers = isWfh ? [] : lvCovers.map(c => ({ Person: c.Person, Channel: c.Channel }));
+  const note = isWfh ? '' : document.getElementById('lv-note').value.trim();
+  const payload = { person: who, type, fromDate: from, toDate: to, covers, note };
+
+  let res, data;
+  try {
+    res = await fetch(editingId ? '/api/time-off/' + editingId : '/api/time-off', {
+      method: editingId ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    data = await res.json().catch(() => ({}));
+  } catch (e) {
+    alert('Could not save that booking - check your connection and try again.');
+    return;
+  }
+  if (!res.ok) { alert(data.error || 'Could not save that booking.'); return; }
+
+  const rec = liveTimeOffRow(data.row);
+  const rows = leaveRows();
+  const i = rows.findIndex(r => r['ID'] === rec.ID);
+  if (i >= 0) rows[i] = rec; else rows.unshift(rec);
+  setData('timeoff', rows);
+  lvEditId = null;
+
   /* Each cover finds out from here now, not by happening to open Time off
      themselves - and only the ones newly added, so re-saving the same
      booking doesn't ping everyone on it again. */
   if (!isWfh) {
-    rec.Covers.filter(c => !prevCoverNames.includes(c.Person)).forEach(c => {
+    covers.filter(c => !prevCoverNames.includes(c.Person)).forEach(c => {
       notify(c.Person, `${rec.Person} named you as cover (${c.Channel}), ${rec.From}${rec.From === rec.To ? '' : ' to ' + rec.To} (${rec.Type}).`, 'timeoff');
     });
   }
-  rec['Updated At'] = new Date().toISOString();
 
-  if (!existing) rows.unshift(rec);
-  setData('timeoff', rows);
-  lvEditId = null;
   /* No handover to send for a work-from-home day - it does not pause
      anything, so there is nothing for Slack to announce. Editing an existing
      booking does not re-send a notice either; use Notice to resend by hand. */
   const post = !existing && !isWfh && document.getElementById('lv-slack').checked && slackHook();
   closeModal();
   if (post) {
-    slackPost(leaveMessage(rec)).then(res => {
-      const rs = leaveRows(); const r2 = rs.filter(x => x['ID'] === rec['ID'])[0];
-      if (r2) { r2['Slack'] = res === 'sent' ? 'sent' : 'failed'; setData('timeoff', rs); }
+    slackPost(leaveMessage(rec)).then(async r2 => {
+      const status = r2 === 'sent' ? 'sent' : 'failed';
+      try {
+        const apiRes = await fetch('/api/time-off/' + rec.ID, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slack: status }),
+        });
+        const d2 = await apiRes.json().catch(() => ({}));
+        if (apiRes.ok) {
+          const rs = leaveRows(); const idx = rs.findIndex(x => x['ID'] === rec.ID);
+          if (idx >= 0) rs[idx] = liveTimeOffRow(d2.row);
+          setData('timeoff', rs);
+        }
+      } catch (e) {}
       render();
-      if (res !== 'sent') alert('The notice could not be dispatched. Check the webhook URL in Settings, or use the Notice button to copy the text.');
+      if (status !== 'sent') alert('The notice could not be dispatched. Check the webhook URL in Settings, or use the Notice button to copy the text.');
     });
   }
   render();
@@ -10110,16 +10226,39 @@ function leaveNotice(id) {
 }
 function sendNotice(id) {
   const rows = leaveRows(), r = rows.filter(x => x['ID'] === id)[0]; if (!r) return;
-  slackPost(leaveMessage(r)).then(res => {
-    r['Slack'] = res === 'sent' ? 'sent' : 'failed'; setData('timeoff', rows);
+  slackPost(leaveMessage(r)).then(async res => {
+    const status = res === 'sent' ? 'sent' : 'failed';
+    try {
+      const apiRes = await fetch('/api/time-off/' + id, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slack: status }),
+      });
+      const data = await apiRes.json().catch(() => ({}));
+      if (apiRes.ok) {
+        const rs = leaveRows(); const i = rs.findIndex(x => x['ID'] === id);
+        if (i >= 0) rs[i] = liveTimeOffRow(data.row);
+        setData('timeoff', rs);
+      }
+    } catch (e) {}
     closeModal(); render();
-    alert(res === 'sent'
+    alert(status === 'sent'
       ? 'Dispatched to ' + SLACK_CHANNEL + '.\n\nThe browser will not let this page read Slack\'s reply, so this confirms the request left, not that it landed. Check the channel.'
       : 'Could not dispatch. Check the webhook URL in Settings.');
   });
 }
-function delLeave(id) {
+async function delLeave(id) {
   if (!confirm('Delete this booking? The day goes back to normal.')) return;
+  try {
+    const res = await fetch('/api/time-off/' + id, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || 'Could not delete that booking.');
+      return;
+    }
+  } catch (e) {
+    alert('Could not delete that booking - check your connection and try again.');
+    return;
+  }
   setData('timeoff', leaveRows().filter(r => r['ID'] !== id));
   render();
 }
@@ -13473,6 +13612,10 @@ async function loadRealIdentity() {
   await loadConsoleRetention();
   await loadChurnStores();
   await loadUpgrades();
+  await loadTimeOff();
+  await loadCampaignActivities();
+  await loadCampaignContacts();
+  await loadEscalations();
   preLaunchReset();
   migrateAmiraRealStores();
   await ensureAugustLoaded();

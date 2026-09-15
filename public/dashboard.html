@@ -3920,6 +3920,19 @@ let LIVE_ESCALATIONS = [];
    link, and the note are shared. */
 let LIVE_PROOFS = {};
 let LIVE_RECS = {};
+/* The last snapshot known to match the server, used by setProofs()/setRecs()
+   to work out what changed. This has to be a SEPARATE clone, not just a
+   reference to LIVE_PROOFS/LIVE_RECS - every existing caller does
+   `const p = getProofs(); p[key] = ...; setProofs(p);`, mutating the map
+   in place before setProofs() ever runs. If setProofs() read its "old"
+   value from LIVE_PROOFS at that point, old and new would already be the
+   same already-mutated object, the diff would see no changes, and nothing
+   would ever sync (this was a real bug: a 15-screenshot import showed up
+   on screen from memory but silently posted zero rows). Cloning on every
+   load and every successful sync keeps "before" and "after" genuinely
+   separate no matter how a caller mutates the live map first. */
+let _proofsSynced = {};
+let _recsSynced = {};
 
 /* ── clipboard ──
  navigator.clipboard needs a secure context and explicit permission, and both
@@ -4687,6 +4700,7 @@ async function loadProofs() {
     if (data && Array.isArray(data.rows)) {
       LIVE_PROOFS = {};
       data.rows.forEach(r => { LIVE_PROOFS[r.id] = { data: r.data, at: r.at, by: r.by }; });
+      _proofsSynced = JSON.parse(JSON.stringify(LIVE_PROOFS));
     }
   } catch (e) {}
 }
@@ -4697,6 +4711,7 @@ async function loadRecs() {
     if (data && Array.isArray(data.rows)) {
       LIVE_RECS = {};
       data.rows.forEach(r => { LIVE_RECS[r.id] = { url: r.url, note: r.note, at: r.at, by: r.by, files: r.files || [] }; });
+      _recsSynced = JSON.parse(JSON.stringify(LIVE_RECS));
     }
   } catch (e) {}
 }
@@ -9819,10 +9834,27 @@ function bhcDelete(id) {
    The handover notice goes to Slack. See slackPost() for what "sent" can
    honestly mean from a page with no server behind it.
    ══════════════════════════════════════════════════════════════════════════ */
-const LEAVE_TYPES = ['Annual leave', 'Sick leave', 'Public holiday', 'Unpaid leave', 'Half day', 'Work from home', 'Other'];
+/* "Half day leave" is a stand-in shown in the Type dropdown - once picked,
+   an AM/PM select appears (see lvTypeSync()) and the row actually gets
+   saved as "Half day leave (AM)" or "Half day leave (PM)", so it stays a
+   single text column with no schema change, and still reads cleanly
+   anywhere r['Type'] is just printed as-is. HALF_DAY_BASE is what the
+   dropdown itself shows; HALF_DAY_TYPES is both saved forms, for anywhere
+   that needs to recognise either. */
+const LEAVE_TYPES = ['Annual leave', 'Half day leave', 'Emergency leave', 'Childcare leave', 'Unpaid leave', 'Work from home'];
+const HALF_DAY_BASE = 'Half day leave';
+const HALF_DAY_TYPES = ['Half day leave (AM)', 'Half day leave (PM)'];
 const WFH_TYPE = 'Work from home';
 const SLACK_CHANNEL = '#my-team-merchant-sucess';
 const SLACK_CHANNEL_URL = 'https://easystore.slack.com/archives/C0A37UC9BME';
+/* The automatic "away in 2 days" reminder (see migrations/010 and
+   /api/cron/away-notices) posts to a different channel and runs
+   server-side on a schedule, with no browser open - so unlike slackHook()
+   above, its webhook lives in a Vercel environment variable
+   (SLACK_AWAY_WEBHOOK_URL), not in this file's Settings. These two
+   constants are only used to describe that in the Settings panel; the app
+   itself never sends to this channel from the browser. */
+const AWAY_SLACK_CHANNEL = '#my-team-retentionandgrowth';
 
 function leaveRows() { return getData('timeoff'); }
 /* Time off's own roster, not the general team list. Sook Yan runs the team
@@ -9858,7 +9890,13 @@ function whoIsWFH(dateKey) { return leaveRows().filter(r => r['Type'] === WFH_TY
 function wfhOn(person, dateKey) {
   return leaveRows().filter(r => canonAM(r['Person']) === canonAM(person) && r['Type'] === WFH_TYPE && dateKey >= r['From'] && dateKey <= r['To'])[0] || null;
 }
-function workingDays(from, to) {
+/* type is optional - passed wherever a specific booking's own type is
+   known, so a half day (which is always a single day) counts as 0.5
+   rather than 1. Callers that only have a date range and no particular
+   booking's type (e.g. a raw preview before a type is chosen) can omit
+   it and get the plain whole-day count. */
+function workingDays(from, to, type) {
+  if (type && HALF_DAY_TYPES.includes(type) && from === to) return 0.5;
   return daysBetween(from, to).filter(d => { const n = new Date(d).getDay(); return n >= 1 && n <= 5; }).length;
 }
 
@@ -9885,7 +9923,7 @@ function leaveMessage(r) {
       r['Note'] ? `_${r['Note']}_` : null,
     ].filter(x => x !== null).join('\n');
   }
-  const days = workingDays(r['From'], r['To']);
+  const days = workingDays(r['From'], r['To'], r['Type']);
   const q = buildQueue(r['Person']).length;
   const bhc = getData('bhc').filter(x => canonAM(x['AM']) === canonAM(r['Person']) && x['Session Date'] &&
     x['Session Date'] >= r['From'] && x['Session Date'] <= r['To']);
@@ -10015,7 +10053,7 @@ function renderTimeOff() {
       <div class="card ${outNow.length ? 'card-orange' : 'card-green'}"><div class="card-num">${outNow.length}</div><div class="card-label">Out today</div><div class="card-sub">${dLong(TODAY)}</div></div>
       <div class="card"><div class="card-num">${wfhNow.length}</div><div class="card-label">Working from home today</div><div class="card-sub">still on the clock</div></div>
       <div class="card"><div class="card-num">${upcoming.length}</div><div class="card-label">Upcoming bookings</div><div class="card-sub">not started yet</div></div>
-      <div class="card"><div class="card-num">${all.filter(r => monthKey(r['From']) === monthKey(today)).reduce((a, r) => a + workingDays(r['From'], r['To']), 0)}</div><div class="card-label">Working days off</div><div class="card-sub">booked in ${monthLabel(monthKey(today))}</div></div>
+      <div class="card"><div class="card-num">${all.filter(r => monthKey(r['From']) === monthKey(today)).reduce((a, r) => a + workingDays(r['From'], r['To'], r['Type']), 0)}</div><div class="card-label">Working days off</div><div class="card-sub">booked in ${monthLabel(monthKey(today))}</div></div>
       <div class="card ${slackHook() ? 'card-green' : 'card-grey'}"><div class="card-num">${slackHook() ? 'on' : 'off'}</div><div class="card-label">Slack notice</div><div class="card-sub">${slackHook() ? SLACK_CHANNEL : 'add a webhook in Settings'}</div></div>
     </div>
 
@@ -10051,7 +10089,7 @@ function renderTimeOff() {
               <td class="ms">${esc(r['Type'])}</td>
               <td style="font-size:11.5px">${esc(r['From'])}</td>
               <td style="font-size:11.5px">${esc(r['To'])}</td>
-              <td>${workingDays(r['From'], r['To'])}</td>
+              <td>${workingDays(r['From'], r['To'], r['Type'])}</td>
               <td>${isWfh ? '<span class="ms">not needed</span>' : (coverLabel(r) ? esc(coverLabel(r)) : '<span style="color:var(--pink);font-weight:600;font-size:11.5px">none named</span>')}</td>
               <td style="font-size:12px;max-width:200px;white-space:normal">${mgr || canonAM(r['Person']) === me ? esc(r['Note']) : (r['Note'] ? '<span class="ms">private</span>' : '')}</td>
               <td>${r['Slack'] === 'sent' ? '<span class="chip c-ok">dispatched</span>' : r['Slack'] === 'failed' ? '<span class="chip c-high">failed</span>' : '<span class="ms">not sent</span>'}</td>
@@ -10093,7 +10131,12 @@ function addLeave(dk, wfh, editId) {
      weeks does not mean typing the date twice. */
   const start = existing ? existing['From'] : (/^\d{4}-\d{2}-\d{2}$/.test(String(dk)) ? dk : todayKey());
   const endStart = existing ? existing['To'] : start;
-  const defaultType = existing ? existing['Type'] : (wfh ? WFH_TYPE : LEAVE_TYPES[0]);
+  /* An existing "Half day leave (AM)"/"(PM)" row has to prefill the Type
+     select with the base label (that's the only one of the two actually
+     in LEAVE_TYPES) and the AM/PM select with whichever half it was. */
+  const existingIsHalf = existing && HALF_DAY_TYPES.includes(existing['Type']);
+  const defaultType = existing ? (existingIsHalf ? HALF_DAY_BASE : existing['Type']) : (wfh ? WFH_TYPE : LEAVE_TYPES[0]);
+  const defaultHalf = existingIsHalf ? existing['Type'].slice(-3, -1) : 'AM';
   const whoVal = existing ? existing['Person'] : mine;
   const isWfhType = defaultType === WFH_TYPE;
   const title = existing ? (isWfhType ? 'Edit work from home day' : 'Edit time off') : (wfh ? 'Set work from home day' : 'Book time off');
@@ -10106,6 +10149,12 @@ function addLeave(dk, wfh, editId) {
              empties without its owner knowing. */
           : `<input id="lv-who" value="${esc(mine)}" readonly style="background:var(--bg);cursor:not-allowed">`}</div>
       <div class="form-group"><label>Type</label><select id="lv-type" onchange="lvTypeSync();lvSync()">${LEAVE_TYPES.map(t => `<option${t === defaultType ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-grid form-2" id="lv-half-group" style="display:none">
+      <div class="form-group"><label>Which half</label><select id="lv-half" onchange="lvSync()">
+        <option value="AM"${defaultHalf === 'AM' ? ' selected' : ''}>AM (morning)</option>
+        <option value="PM"${defaultHalf === 'PM' ? ' selected' : ''}>PM (afternoon)</option>
+      </select></div>
     </div>
     <div class="form-grid form-2">
       <div class="form-group"><label>From *</label><input id="lv-from" type="date" value="${start}" onchange="lvTypeSync();lvSync()"></div>
@@ -10139,6 +10188,7 @@ function addLeave(dk, wfh, editId) {
 function lvTypeSync() {
   const typeSel = document.getElementById('lv-type'); if (!typeSel) return;
   const isWfh = typeSel.value === WFH_TYPE;
+  const isHalf = typeSel.value === HALF_DAY_BASE;
   const fromInput = document.getElementById('lv-from');
   const toInput = document.getElementById('lv-to');
   const toGroup = document.getElementById('lv-to-group');
@@ -10146,12 +10196,17 @@ function lvTypeSync() {
   const noteGroup = document.getElementById('lv-note-group');
   const slackGroup = document.getElementById('lv-slack-group');
   const note = document.getElementById('lv-wfh-note');
-  if (isWfh && fromInput && toInput) toInput.value = fromInput.value;
-  if (toInput) toInput.disabled = isWfh;
-  if (toGroup) toGroup.style.opacity = isWfh ? '.55' : '1';
+  const halfGroup = document.getElementById('lv-half-group');
+  /* Work from home and a half day are both a single day, not a range - the
+     To field just follows From for either. */
+  if ((isWfh || isHalf) && fromInput && toInput) toInput.value = fromInput.value;
+  if (toInput) toInput.disabled = isWfh || isHalf;
+  if (toGroup) toGroup.style.opacity = (isWfh || isHalf) ? '.55' : '1';
+  if (halfGroup) halfGroup.style.display = isHalf ? '' : 'none';
   if (coverGroup) coverGroup.style.display = isWfh ? 'none' : '';
   /* A work-from-home day needs no handover, so neither the free-text note
-     nor the Slack notice applies - only actual absence does. */
+     nor the Slack notice applies - only actual absence does. A half day is
+     still a real absence for half the day, so it keeps both. */
   if (noteGroup) noteGroup.style.display = isWfh ? 'none' : '';
   if (slackGroup) slackGroup.style.display = isWfh ? 'none' : '';
   if (note) note.style.display = isWfh ? 'block' : 'none';
@@ -10204,7 +10259,11 @@ function lvSetCoverChannel(i, ch) {
 function lvSync() {
   const from = document.getElementById('lv-from').value, to = document.getElementById('lv-to').value;
   const el = document.getElementById('lv-clash'); if (!el || !from) return;
-  const isWfh = document.getElementById('lv-type').value === WFH_TYPE;
+  const typeVal = document.getElementById('lv-type').value;
+  const isWfh = typeVal === WFH_TYPE;
+  const isHalf = typeVal === HALF_DAY_BASE;
+  const halfSel = document.getElementById('lv-half');
+  const effectiveType = isHalf ? (HALF_DAY_BASE + ' (' + (halfSel ? halfSel.value : 'AM') + ')') : typeVal;
   if (to && to < from) { document.getElementById('lv-to').value = from; }
   const who = document.getElementById('lv-who').value;
   if (isWfh) {
@@ -10215,21 +10274,27 @@ function lvSync() {
       : '';
     return;
   }
-  const days = daysBetween(from, document.getElementById('lv-to').value || from);
+  const toVal = document.getElementById('lv-to').value || from;
+  const days = daysBetween(from, toVal);
   const bhc = getData('bhc').filter(x => canonAM(x['AM']) === canonAM(who) && x['Session Date'] && days.includes(x['Session Date']));
   const fu = getData('bhc').filter(x => canonAM(x['AM']) === canonAM(who) && x['Next Follow Up'] && days.includes(x['Next Follow Up']));
   const q = buildQueue(who).length;
   el.innerHTML = `<div class="blocked" style="margin-bottom:12px">
-    <b style="color:var(--navy)">${workingDays(from, document.getElementById('lv-to').value || from)} working day(s).</b>
+    <b style="color:var(--navy)">${workingDays(from, toVal, effectiveType)} working day(s).</b>
     ${bhc.length ? `<br><span style="color:var(--pink)"><b>${bhc.length} health check session${bhc.length === 1 ? '' : 's'} fall inside this window</b> and will need a new date: ${bhc.map(b => esc(b['Merchant'])).join(', ')}.</span>` : ''}
     ${fu.length ? `<br><span style="color:var(--amber)">${fu.length} follow-up${fu.length === 1 ? '' : 's'} due in the window.</span>` : ''}
     <br>${q} merchant${q === 1 ? '' : 's'} in the churn queue will pause rather than move to anyone else.</div>`;
 }
 async function saveLeave() {
   const from = document.getElementById('lv-from').value;
-  const type = document.getElementById('lv-type').value;
-  const isWfh = type === WFH_TYPE;
-  const to = isWfh ? from : (document.getElementById('lv-to').value || from);
+  const typeSelVal = document.getElementById('lv-type').value;
+  const isWfh = typeSelVal === WFH_TYPE;
+  const isHalf = typeSelVal === HALF_DAY_BASE;
+  /* The dropdown only ever shows the base "Half day leave" label - the row
+     itself is saved with whichever half was picked baked into the type
+     string, same idea as WFH_TYPE being a fixed constant elsewhere. */
+  const type = isHalf ? (HALF_DAY_BASE + ' (' + (document.getElementById('lv-half').value || 'AM') + ')') : typeSelVal;
+  const to = (isWfh || isHalf) ? from : (document.getElementById('lv-to').value || from);
   if (!from) { alert('Pick the dates.'); return; }
   /* Enforced here as well as in the form: a readonly field is a courtesy,
      not a rule. */
@@ -12350,6 +12415,12 @@ function renderSettings() {
  <span id="slack-status" style="font-size:12px;color:var(--muted);margin-left:10px"></span>
  <p style="font-size:11.5px;color:var(--muted);margin-top:9px">The browser will not let this page read Slack's reply, so a test can confirm the request left but not that it arrived. Check the channel.</p></div>
 
+ <div class="setup-step" style="border-left-color:var(--indigo)"><h3>Automatic away reminder</h3>
+ <p>Separately from the handover notice above, the app now posts a short reminder to <b>${AWAY_SLACK_CHANNEL}</b> on its own, about 2 days before anyone's booked leave starts - Annual leave, Half day leave, Emergency leave, Childcare leave, and Unpaid leave. Work from home is left out, since it is not an absence.</p>
+ <p>This one runs on a schedule with no browser open, so unlike the webhook above it cannot live in this file - it needs two values set as <b>Environment Variables</b> in the Vercel project (Project → Settings → Environment Variables), then a redeploy:</p>
+ <p style="font-family:monospace;font-size:12px;background:var(--bg);border-radius:8px;padding:10px 12px;line-height:1.8">SLACK_AWAY_WEBHOOK_URL <span style="color:var(--muted)">— a new incoming webhook for ${AWAY_SLACK_CHANNEL}, created at api.slack.com the same way as the one above</span><br>CRON_SECRET <span style="color:var(--muted)">— a random string so only the scheduled job can trigger it</span></p>
+ <p style="font-size:11.5px;color:var(--muted);margin-top:9px">Until both are set, nothing posts and nothing is lost - bookings just wait until the variables exist, then get picked up on the next daily run.</p></div>
+
  <div class="setup-step"><h3>Crisp BCC</h3>
  <p>Every email draft blind-copies this address so the thread lands in Crisp. This works today. It needs no API at all.</p>
  <input id="set-crisp" style="width:340px;border:1px solid var(--line);border-radius:8px;padding:8px 10px" value="${esc(s.crispBcc)}" placeholder="your-crisp-inbox@easystore.co">
@@ -12361,7 +12432,7 @@ function renderSettings() {
  <button class="btn btn-navy btn-sm" onclick="saveCfg()" style="margin-top:8px">Save</button></div>
 
  <div class="setup-step" style="border-left-color:var(--amber)"><h3>Sharing with the team</h3>
- <p>${statusApi() ? 'Connected. Your updates reach the whole team automatically.' : '<b>Not connected yet.</b> Your updates stay in your own browser, so colleagues will not see them.'}</p>
+ <p><b>Proof screenshots, call recording details, Upgrades, Time off, Campaign activities and Escalations already sync live</b> - no export or merge needed for those, they update the moment anyone attaches or changes something. Export/Merge below is only for Win-back and At-risk notes, which still live in each person's own browser.</p>
  <button class="btn btn-navy" onclick="exportProgress()">Export my progress</button>
  <label class="btn btn-ghost" style="margin-left:8px;cursor:pointer">Merge someone's file
  <input type="file" accept="application/json" style="display:none" onchange="importProgress(event)"></label></div>
@@ -12662,9 +12733,9 @@ function getProofs() {
   return LIVE_PROOFS;
 }
 function setProofs(p) {
-  const old = LIVE_PROOFS;
   LIVE_PROOFS = p;
-  syncProofsDiff(old, p);
+  syncProofsDiff(_proofsSynced, p);
+  _proofsSynced = JSON.parse(JSON.stringify(p));
 }
 function hasProof(k) {
   const p = getProofs()[k];
@@ -12936,9 +13007,9 @@ function getRecs() {
   return LIVE_RECS;
 }
 function setRecs(r) {
-  const old = LIVE_RECS;
   LIVE_RECS = r;
-  syncRecsDiff(old, r);
+  syncRecsDiff(_recsSynced, r);
+  _recsSynced = JSON.parse(JSON.stringify(r));
 }
 /* ── what this browser can actually decode ──
    A stored file is not the same as a playable one. macOS screen recordings are

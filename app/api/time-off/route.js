@@ -60,20 +60,52 @@ export async function POST(req) {
 
   const person = me.role === 'manager' && body.person ? String(body.person).trim() : me.name;
 
-  const { rows } = await db().query(
-    `insert into time_off (person, type, from_date, to_date, covers, note, slack)
-     values ($1,$2,$3,$4,$5,$6,$7)
-     returning id, person, type, from_date, to_date, covers, note, slack,
-               created_at, updated_at`,
-    [
-      person,
-      type,
-      fromDate,
-      toDate,
-      JSON.stringify(body.covers || []),
-      body.note || null,
-      body.slack || null,
-    ],
-  );
-  return NextResponse.json({ row: shapeRow(rows[0]) }, { status: 201 });
+  try {
+    const { rows } = await db().query(
+      `insert into time_off (person, type, from_date, to_date, covers, note, slack)
+       values ($1,$2,$3,$4,$5,$6,$7)
+       returning id, person, type, from_date, to_date, covers, note, slack,
+                 created_at, updated_at`,
+      [
+        person,
+        type,
+        fromDate,
+        toDate,
+        JSON.stringify(body.covers || []),
+        body.note || null,
+        body.slack || null,
+      ],
+    );
+    return NextResponse.json({ row: shapeRow(rows[0]) }, { status: 201 });
+  } catch (err) {
+    /* A double-click, or a resubmit after the first request's response never
+       made it back, used to leave two identical Work from home rows for the
+       same person/day - the browser's clash-check only guards against that
+       if its local cache already knows about the first save, which it
+       might not yet. The unique index (time_off_wfh_one_per_day, see
+       migrations/009) now stops that at the database, and lands here as a
+       23505. Rather than surface a raw failure for what's really just a
+       resubmit, treat it as "update the existing booking" - the last
+       submission's note/cover/slack details win, same as if the person had
+       edited the row. Any other error still surfaces normally. */
+    if (err && err.code === '23505' && type === 'Work from home') {
+      const { rows } = await db().query(
+        `update time_off set to_date = $4, covers = $5, note = $6, slack = $7, updated_at = now()
+         where person = $1 and from_date = $3 and type = $2
+         returning id, person, type, from_date, to_date, covers, note, slack,
+                   created_at, updated_at`,
+        [
+          person,
+          type,
+          fromDate,
+          toDate,
+          JSON.stringify(body.covers || []),
+          body.note || null,
+          body.slack || null,
+        ],
+      );
+      if (rows[0]) return NextResponse.json({ row: shapeRow(rows[0]) }, { status: 200 });
+    }
+    return NextResponse.json({ error: 'Could not save that booking - it may already exist for that day.' }, { status: 409 });
+  }
 }

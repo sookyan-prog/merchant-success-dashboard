@@ -3909,6 +3909,17 @@ let LIVE_TIMEOFF = [];
 let LIVE_CAMPAIGN_ACTIVITIES = [];
 let LIVE_CAMPAIGN_CONTACTS = {};
 let LIVE_ESCALATIONS = [];
+/* Proof-of-contact screenshots and call-recording details - see
+   getProofs()/setProofs() and getRecs()/setRecs() further down, which read
+   and write these directly (this pair bypasses getData()/setData(), since
+   it already had its own dedicated accessor functions before any of this
+   lived on a server). Both are maps keyed by a business id (a merchant ID,
+   or "hc-<store id>" for a health check), not lists. The actual recording
+   audio/video file is never in here and never leaves the uploading
+   browser's IndexedDB - only the file's name, size, duration, the optional
+   link, and the note are shared. */
+let LIVE_PROOFS = {};
+let LIVE_RECS = {};
 
 /* ── clipboard ──
  navigator.clipboard needs a secure context and explicit permission, and both
@@ -4665,6 +4676,30 @@ async function loadEscalations() {
     if (data && Array.isArray(data.rows)) LIVE_ESCALATIONS = data.rows;
   } catch (e) {}
 }
+/* Proofs and call-recording details come back as a flat array of rows
+   (one per business key), same shape as every other live list - turned
+   into the {id: entry} map every existing call site already expects, so
+   nothing downstream of getProofs()/getRecs() needed to change. */
+async function loadProofs() {
+  try {
+    const res = await fetch('/api/proofs');
+    const data = await res.json();
+    if (data && Array.isArray(data.rows)) {
+      LIVE_PROOFS = {};
+      data.rows.forEach(r => { LIVE_PROOFS[r.id] = { data: r.data, at: r.at, by: r.by }; });
+    }
+  } catch (e) {}
+}
+async function loadRecs() {
+  try {
+    const res = await fetch('/api/call-recordings');
+    const data = await res.json();
+    if (data && Array.isArray(data.rows)) {
+      LIVE_RECS = {};
+      data.rows.forEach(r => { LIVE_RECS[r.id] = { url: r.url, note: r.note, at: r.at, by: r.by, files: r.files || [] }; });
+    }
+  } catch (e) {}
+}
 /* The console's Churn Stores report has no account-manager column, so the
    owner has to come from somewhere else - MERCHANTS_MASTER (the paid-store
    pull) already carries one per store ID and is the same idea as
@@ -4815,11 +4850,13 @@ function preLaunchReset() {
   if (typeof UPGRADE_SEED_VERSION !== 'undefined') s.upgradeSeed = UPGRADE_SEED_VERSION;
   s.preLaunchReset = PRE_LAUNCH_RESET_VERSION;
   saveSettings(s);
-  /* My files: proof screenshots + recording metadata live in their own
-     localStorage keys (not getData), and the actual recording blobs sit in
-     IndexedDB - clear all three. */
-  if (typeof setProofs === 'function') setProofs({});
-  if (typeof setRecs === 'function') setRecs({});
+  /* Proof screenshots and recording details used to be cleared here too,
+     back when they lived in their own localStorage keys. They now live in
+     the shared proofs/call_recordings tables (loadProofs()/loadRecs(),
+     called earlier in boot) - a team's actual proof-of-contact history,
+     not per-browser test data - so a first-load reset must never touch
+     them. The recording FILE itself is still only ever in IndexedDB
+     (nothing about that changed), so that part still gets cleared below. */
   if (typeof idb === 'function') {
     idb().then(db => {
       if (!db) return;
@@ -12399,7 +12436,7 @@ function exportProgress() {
   a.href = URL.createObjectURL(b);
   a.download = 'merchant-success-' + (myAM || 'progress').replace(/\s+/g, '-').toLowerCase() + '-' + todayKey() + '.json';
   a.click();
-  alert('Exported ' + shots + ' screenshots and ' + Object.keys(d.rec).length + ' recordings, ' + mb + ' MB.\n\nSend this to your manager so it reaches Team files.');
+  alert('Exported ' + shots + ' screenshots and ' + Object.keys(d.rec).length + ' recordings, ' + mb + ' MB.\n\nTeam files already updates live, so this is only needed as a manual backup or to move progress to another browser.');
 }
 function importProgress(ev) {
   const f = ev.target.files[0];
@@ -12597,22 +12634,37 @@ function jsAttr(v) {
       .replace(/'/g, "\\'"),
   );
 }
+/* Every call site here already only ever changes one key at a time
+   (attach, replace, or remove a single proof) before calling setProofs()
+   with the whole, now-mutated map - so rather than resending the entire
+   proof history's base64 images on every single save (which only gets
+   slower and heavier as the team's history grows), this diffs the old map
+   against the new one and syncs just the key(s) that actually changed.
+   importProgress() is the one caller that can change several keys in one
+   call (a batch merge) - the diff handles that the same way, just as
+   several individual upserts instead of one. */
+function syncProofsDiff(oldP, newP) {
+  Object.keys(newP).forEach(k => {
+    if (!oldP[k] || JSON.stringify(oldP[k]) !== JSON.stringify(newP[k])) {
+      fetch('/api/proofs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: k, data: newP[k].data, at: newP[k].at, by: newP[k].by }),
+      }).catch(() => {});
+    }
+  });
+  Object.keys(oldP).forEach(k => {
+    if (!(k in newP)) {
+      fetch('/api/proofs/' + encodeURIComponent(k), { method: 'DELETE' }).catch(() => {});
+    }
+  });
+}
 function getProofs() {
-  try {
-    return JSON.parse(localStorage.getItem('ret2_proof') || '{}');
-  } catch (e) {
-    return _memData._proof || {};
-  }
+  return LIVE_PROOFS;
 }
 function setProofs(p) {
-  _memData._proof = p;
-  try {
-    localStorage.setItem('ret2_proof', JSON.stringify(p));
-  } catch (e) {
-    alert(
-      'Browser storage is full, so that screenshot could not be saved. Remove a few older proofs, or export your progress and reset.',
-    );
-  }
+  const old = LIVE_PROOFS;
+  LIVE_PROOFS = p;
+  syncProofsDiff(old, p);
 }
 function hasProof(k) {
   const p = getProofs()[k];
@@ -12858,18 +12910,35 @@ function mediaDel(k) {
 
 /* ── call recordings ── */
 
+/* Same one-key-at-a-time diff as syncProofsDiff() above - see that comment.
+   "files" never carries the actual blob (see the MEDIA STORE section
+   below), only its name/size/duration/stored-flag, so this stays small
+   regardless of how large the recording itself is. */
+function syncRecsDiff(oldR, newR) {
+  Object.keys(newR).forEach(k => {
+    if (!oldR[k] || JSON.stringify(oldR[k]) !== JSON.stringify(newR[k])) {
+      fetch('/api/call-recordings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: k, url: newR[k].url, note: newR[k].note, at: newR[k].at, by: newR[k].by,
+          files: recFiles(newR[k]).map(f => ({ id: f.id, name: f.name, size: f.size, type: f.type, mins: f.mins, stored: f.stored, playable: f.playable })),
+        }),
+      }).catch(() => {});
+    }
+  });
+  Object.keys(oldR).forEach(k => {
+    if (!(k in newR)) {
+      fetch('/api/call-recordings/' + encodeURIComponent(k), { method: 'DELETE' }).catch(() => {});
+    }
+  });
+}
 function getRecs() {
-  try {
-    return JSON.parse(localStorage.getItem('ret2_rec') || '{}');
-  } catch (e) {
-    return _memData._rec || {};
-  }
+  return LIVE_RECS;
 }
 function setRecs(r) {
-  _memData._rec = r;
-  try {
-    localStorage.setItem('ret2_rec', JSON.stringify(r));
-  } catch (e) {}
+  const old = LIVE_RECS;
+  LIVE_RECS = r;
+  syncRecsDiff(old, r);
 }
 /* ── what this browser can actually decode ──
    A stored file is not the same as a playable one. macOS screen recordings are
@@ -13143,8 +13212,12 @@ function evidenceItems() {
 
 function renderProof() {
   const mgr = isManager();
-  /* An account manager sees their own evidence and nobody else's. */
-  const all = mgr ? evidenceItems() : evidenceItems().filter(x => x.who === canonAM(myAM));
+  /* An account manager sees their own evidence and nobody else's. "who" is
+     whatever myAM was at the moment the proof was saved (commitProof/
+     commitCallProof both store the real login name) - canonAM() on both
+     sides so this still matches for anyone whose real name and canonical
+     alias differ (see AM_ALIAS_DEFAULT). */
+  const all = mgr ? evidenceItems() : evidenceItems().filter(x => canonAM(x.who) === canonAM(myAM));
   const people = [...new Set(all.map(x => x.who).filter(Boolean))].sort();
   let f = all;
   if (proofWho !== 'all') f = f.filter(x => x.who === proofWho);
@@ -13163,7 +13236,7 @@ function renderProof() {
   const pendingHc = getData('risk')
     .map(enrich)
     .filter(r => r['Last Health Check'] && !hasRec('hc-' + r['Store ID']))
-    .filter(r => mgr || (r['Health Check By'] || r['AM']) === mine)
+    .filter(r => mgr || canonAM(r['Health Check By'] || r['AM']) === mine)
     .map(r => ({
       who: r['Health Check By'] || r['AM'] || 'unattributed',
       what: 'health check recording',
@@ -13205,8 +13278,7 @@ function renderProof() {
       <div class="stamp"><b>${all.length}</b> pieces of evidence</div>
     </div>
 
-    ${mgr ? `<div class="alert alert-yellow"><b>You are looking at this browser only.</b> Evidence is stored on the machine that captured it. In this prototype everyone shares one browser, so you can see the whole team; in real use you would collect it by asking each person for <b>Settings, Export my progress</b> and then <b>Merge someone's file</b> here. Exports carry the screenshots with them.
-      <div style="margin-top:9px"><button class="btn btn-ghost btn-xs" onclick="go('settings')">Open Settings</button></div></div>` : ''}
+    ${mgr ? `<div class="alert alert-blue"><b>This is the whole team's evidence, live.</b> The screenshots and recording details below sync as soon as anyone attaches them - no export needed. The actual recording audio/video file is the one exception: it stays on whichever machine captured it, so a shared link is still how you'd listen to one yourself.</div>` : ''}
 
     <div class="cards-row">
       <div class="card card-green"><div class="card-num">${n('msg')}</div><div class="card-label">Message screenshots</div><div class="card-sub">churn follow-ups</div></div>
@@ -13678,6 +13750,8 @@ async function loadRealIdentity() {
   await loadCampaignActivities();
   await loadCampaignContacts();
   await loadEscalations();
+  await loadProofs();
+  await loadRecs();
   preLaunchReset();
   migrateAmiraRealStores();
   await ensureAugustLoaded();

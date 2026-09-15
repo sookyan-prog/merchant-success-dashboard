@@ -12434,8 +12434,9 @@ function renderSettings() {
  <div class="setup-step" style="border-left-color:var(--amber)"><h3>Sharing with the team</h3>
  <p><b>Proof screenshots, call recording details, Upgrades, Time off, Campaign activities and Escalations already sync live</b> - no export or merge needed for those, they update the moment anyone attaches or changes something. Export/Merge below is only for Win-back and At-risk notes, which still live in each person's own browser.</p>
  <button class="btn btn-navy" onclick="exportProgress()">Export my progress</button>
- <label class="btn btn-ghost" style="margin-left:8px;cursor:pointer">Merge someone's file
- <input type="file" accept="application/json" style="display:none" onchange="importProgress(event)"></label></div>
+ <label class="btn btn-ghost" style="margin-left:8px;cursor:pointer">Merge someone's file(s)
+ <input type="file" accept="application/json" multiple style="display:none" onchange="importProgress(event)"></label>
+ <p style="font-size:11.5px;color:var(--muted);margin-top:9px">Select more than one file at once (e.g. ctrl/cmd-click each one) to merge everybody's export in one go.</p></div>
 
  <div class="setup-step" style="border-left-color:var(--pink)"><h3>Reset</h3>
  <p>Clears local progress and reloads the merchant list from the snapshot. Affects nothing outside this browser.</p>
@@ -12509,13 +12510,31 @@ function exportProgress() {
   a.click();
   alert('Exported ' + shots + ' screenshots and ' + Object.keys(d.rec).length + ' recordings, ' + mb + ' MB.\n\nTeam files already updates live, so this is only needed as a manual backup or to move progress to another browser.');
 }
+/* Reads every file picked (the input allows multiple now), merges each
+   one's winback/risk/escalations rows, sent-log, proofs and recordings in
+   turn - same per-file logic as before, just looped - then shows one
+   combined summary instead of one alert per file. Reads happen in
+   parallel (that's just I/O), but the merges themselves run one file at a
+   time, in the order the files were picked, once every read has finished -
+   so two files that both touch the same record merge in a stable,
+   predictable order rather than racing each other. */
 function importProgress(ev) {
-  const f = ev.target.files[0];
-  if (!f) return;
-  const rd = new FileReader();
-  rd.onload = () => {
-    try {
-      const d = JSON.parse(rd.result);
+  const files = Array.from(ev.target.files || []);
+  if (!files.length) return;
+  ev.target.value = '';
+  Promise.all(files.map(f => new Promise(resolve => {
+    const rd = new FileReader();
+    rd.onload = () => {
+      try { resolve({ name: f.name, data: JSON.parse(rd.result) }); }
+      catch (e) { resolve({ name: f.name, data: null }); }
+    };
+    rd.onerror = () => resolve({ name: f.name, data: null });
+    rd.readAsText(f);
+  }))).then(results => {
+    let totalN = 0, totalShots = 0, totalRecs = 0;
+    const byNames = [], badFiles = [];
+    results.forEach(({ name, data: d }) => {
+      if (!d) { badFiles.push(name); return; }
       let n = 0;
       ['winback', 'risk', 'escalations'].forEach(tab => {
         if (!Array.isArray(d[tab])) return;
@@ -12556,17 +12575,16 @@ function importProgress(ev) {
         });
         setRecs(rc);
       }
-      alert(
-        n + ' records merged from ' + (d.by || 'that file') + '.\n' +
-        shots + ' screenshots and ' + recs + ' recordings added. See Team today, Team files.'
-      );
-      render();
-    } catch (e) {
-      alert('That file could not be read.');
-    }
-  };
-  rd.readAsText(f);
-  ev.target.value = '';
+      totalN += n; totalShots += shots; totalRecs += recs;
+      byNames.push(d.by || name);
+    });
+    alert(
+      totalN + ' record' + (totalN === 1 ? '' : 's') + ' merged from ' + byNames.join(', ') + '.\n' +
+      totalShots + ' screenshot' + (totalShots === 1 ? '' : 's') + ' and ' + totalRecs + ' recording' + (totalRecs === 1 ? '' : 's') + ' added. See Team today, Team files.' +
+      (badFiles.length ? '\n\n' + badFiles.length + ' file(s) could not be read and were skipped: ' + badFiles.join(', ') : '')
+    );
+    render();
+  });
 }
 async function resetLocal() {
   if (!confirm('Clear your local progress and reload the merchant list?')) return;

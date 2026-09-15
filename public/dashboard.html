@@ -13029,6 +13029,65 @@ function setRecs(r) {
   syncRecsDiff(_recsSynced, r);
   _recsSynced = JSON.parse(JSON.stringify(r));
 }
+/* A screenshot pasted or dragged in before live sync existed was saved
+   into this browser's own localStorage, under whatever key the app used
+   at the time - proofs and recordings always had their own dedicated
+   storage, separate from the generic 'ret2_' + k pattern getData()/
+   setData() uses, so there's no single well-known key name to check.
+   loadProofs()/loadRecs() above only ever pull from the server, so
+   anything still sitting in that old key is invisible to the app now
+   (and was silently left out of every export since) - not lost, just
+   orphaned in a key nothing reads anymore.
+   Rather than guess the exact old key name, this scans every key in
+   localStorage at boot and recognises the shape: a proof map's entries
+   always carry a base64 image in `data`; a recording map's entries never
+   do, but carry `files`/`url` instead. Anything that matches and isn't
+   already in the live (server-backed) set gets folded in and pushed up
+   via setProofs()/setRecs(), which now sync on every call. Only ever
+   adds - never overwrites or removes anything already live. Safe to run
+   on every boot: matching a key twice just finds nothing new the second
+   time. */
+function looksLikeProofMap(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+  const vals = Object.values(obj);
+  if (!vals.length) return false;
+  return vals.every(v => v && typeof v === 'object' && typeof v.data === 'string' && v.data.slice(0, 5) === 'data:');
+}
+function looksLikeRecMap(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+  const vals = Object.values(obj);
+  if (!vals.length) return false;
+  return vals.every(v => v && typeof v === 'object' && typeof v.data === 'undefined' && ('files' in v || 'url' in v));
+}
+function migrateOrphanedProofsAndRecs() {
+  let addedProofs = 0, addedRecs = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || key === 'ret2_settings' || key.indexOf('ret2_sent_') === 0) continue;
+      let parsed;
+      try { parsed = JSON.parse(localStorage.getItem(key)); } catch (e) { continue; }
+      if (looksLikeProofMap(parsed)) {
+        const p = getProofs();
+        let changed = false;
+        Object.keys(parsed).forEach(k => {
+          if (!p[k] || new Date(parsed[k].at || 0) > new Date(p[k].at || 0)) { p[k] = parsed[k]; addedProofs++; changed = true; }
+        });
+        if (changed) setProofs(p);
+      } else if (looksLikeRecMap(parsed)) {
+        const r = getRecs();
+        let changed = false;
+        Object.keys(parsed).forEach(k => {
+          if (!r[k] || new Date(parsed[k].at || 0) > new Date(r[k].at || 0)) { r[k] = parsed[k]; addedRecs++; changed = true; }
+        });
+        if (changed) setRecs(r);
+      }
+    }
+  } catch (e) {}
+  if (addedProofs || addedRecs) {
+    try { console.log('Recovered ' + addedProofs + ' orphaned proof(s) and ' + addedRecs + ' recording detail(s) from this browser\'s older local storage.'); } catch (e) {}
+  }
+}
 /* ── what this browser can actually decode ──
    A stored file is not the same as a playable one. macOS screen recordings are
    .mov (QuickTime), which Chrome and Edge will not decode even though the file
@@ -13841,6 +13900,7 @@ async function loadRealIdentity() {
   await loadEscalations();
   await loadProofs();
   await loadRecs();
+  migrateOrphanedProofsAndRecs();
   preLaunchReset();
   migrateAmiraRealStores();
   await ensureAugustLoaded();

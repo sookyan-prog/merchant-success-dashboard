@@ -4193,6 +4193,19 @@ function canonAM(n) {
   const a = amAlias();
   return a[String(n || '').trim()] || String(n || '').trim();
 }
+/* For any dropdown that ASSIGNS a record's owner (Upgrade Owner, BHC
+   Advisor, at-risk Owner, Escalation Assigned to), not for merely
+   displaying who's on the team. amList lists a person's real name and
+   their older canonical alias as if they were two separate, independently
+   pickable people (Kian Ming/George Sim, Choo Zhe Hong/Calvin Choo) - the
+   keys of amAlias() are exactly those older aliases, so filtering them out
+   leaves one unambiguous option per real person. Nothing already saved
+   under an alias is touched; this only changes what a NEW pick can be. */
+function assignableAmList() {
+  const list = getSettings().amList || [];
+  const aliasKeys = new Set(Object.keys(amAlias()));
+  return list.filter(a => !aliasKeys.has(a));
+}
 
 /* ── who is looking ──
  Team today compares people against each other, so it is a manager's view.
@@ -5103,7 +5116,12 @@ function refocus(id, val) {
  sits untouched, then at-risk by tier. There is no 90-day window either. */
 function buildQueue(am) {
   const who = am === undefined ? myAM : am;
-  const keep = r => !who || r['AM'] === who;
+  /* canonAM() on both sides: callers pass this a mix of real login names
+     (e.g. Time off's r['Person']) and canonical roster names (e.g. My
+     day's personName(k)), and a churn/risk row's own "AM" can be either
+     too - so a raw comparison could miss a person's own queue depending
+     on which label happened to be used where. */
+  const keep = r => !who || canonAM(r['AM']) === canonAM(who);
   const wb = getData('winback').map(enrich).filter(keep);
   const rk = getData('risk').map(enrich).filter(keep);
   const q = [];
@@ -5580,7 +5598,7 @@ function editRiskRow(id) {
  <div class="form-group"><label>Days since login</label><input id="e-login" type="number" min="0" value="${esc(r['Days Since Login'])}"></div>
  <div class="form-group"><label>Renewal date</label><input id="e-renewal" type="date" value="${esc(r['Renewal Date'] || '')}"></div>
  </div>
- <div class="form-group"><label>Owner</label><select id="e-am">${(getSettings().amList || []).map(a => `<option${r['AM'] === a ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select></div>
+ <div class="form-group"><label>Owner</label><select id="e-am">${assignableAmList().map(a => `<option${canonAM(r['AM']) === a ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select></div>
  <div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
  <button class="btn btn-green" onclick="saveRiskEdit('${id}')">Save</button></div>`,
   );
@@ -5826,7 +5844,11 @@ function outsideTeam() {
 function healthChecksFor(k) {
   const name = personName(k);
   const live = getData('risk').map(enrich).filter(r => !r._expired && r['Outcome'] !== 'Recovered');
-  let mine = live.filter(r => r['AM'] === name);
+  /* canonAM() on the row's side: the at-risk Owner field (editRiskRow) used
+     to be an editable dropdown that could save a merchant under either a
+     person's real name or their older canonical alias, so a merchant can be
+     on record under either label even though it means the same person. */
+  let mine = live.filter(r => canonAM(r['AM']) === name);
   let unowned = false;
   if (!mine.length) { mine = live.filter(r => !r['AM']); unowned = true; }
   /* A check done today by this person sorts first, so the card stays on the
@@ -6080,7 +6102,7 @@ function pickDiagnostic(k) {
     .map(enrich)
     .filter(r => !r._expired && r['Outcome'] !== 'Recovered')
     .map(r => ({ ...r, _tier: calcTier(r) }));
-  let mine = live.filter(r => r['AM'] === name);
+  let mine = live.filter(r => canonAM(r['AM']) === name);
   let unowned = false;
   if (!mine.length) {
     mine = live.filter(r => !r['AM']);
@@ -6154,18 +6176,24 @@ function diagnosticCard(k) {
 const MAX_ACTIVITIES = 2;
 const BHC_MONTHLY_TARGET = 4;
 
+/* Every AM comparison below runs r['AM'] through canonAM(): the "Advisor"
+   field used to be an editable dropdown that could save a check under
+   either a person's real name or their older canonical alias (see the fix
+   in bhcStart()), so a record can carry either label even though the two
+   mean the same person - canonAM() folds them back together, matching the
+   convention the rest of the app uses for the same alias (see canonAM()). */
 function bhcForDate(name, dk) {
-  return getData('bhc').filter(r => r['AM'] === name && r['Session Date'] === dk)[0] || null;
+  return getData('bhc').filter(r => canonAM(r['AM']) === name && r['Session Date'] === dk)[0] || null;
 }
 function followUpForDate(name, dk) {
-  return getData('bhc').filter(r => r['AM'] === name && r['Next Follow Up'] === dk)[0] || null;
+  return getData('bhc').filter(r => canonAM(r['AM']) === name && r['Next Follow Up'] === dk)[0] || null;
 }
 function bhcBookedInWeek(name, di) {
   const week = [0, 1, 2, 3, 4].map(i => dKey(weekDate(i)));
-  return getData('bhc').filter(r => r['AM'] === name && week.includes(r['Session Date']))[0] || null;
+  return getData('bhc').filter(r => canonAM(r['AM']) === name && week.includes(r['Session Date']))[0] || null;
 }
 function bhcMonthCount(name, mk) {
-  return getData('bhc').filter(r => r['AM'] === name && r['Session Date'] &&
+  return getData('bhc').filter(r => canonAM(r['AM']) === name && r['Session Date'] &&
     monthKey(r['Session Date']) === mk && ['completed', 'followup'].includes(r['Stage'])).length;
 }
 
@@ -6970,7 +6998,7 @@ function ensureUpgradesSeeded() {
 }
 function upgradeRows(am) {
   const who = am === undefined ? null : am;
-  return getData('upgrades').filter(r => !who || r['AM'] === who);
+  return getData('upgrades').filter(r => !who || canonAM(r['AM']) === canonAM(who));
 }
 function upWon(r) { return r['Stage'] === 'upgraded'; }
 function upMonth(r) { return monthKey(r['Closing Date']); }
@@ -7026,21 +7054,26 @@ function upShowClosedAllTime() { upStageFilter = 'upgraded'; upWho = 'all'; upMo
 function upMonthLabelSel() { return upMonthSel === '__all__' ? 'all time' : monthLabel(upMonthSel); }
 
 function renderUpgrade() {
-  /* Real login name, not canonAM(myAM): the shared upgrades table keys "AM"
-     to whoever actually signed in (the server stamps it that way on
-     create), it does not carry over the older canonical alias some other,
-     still-local modules use. */
+  /* The shared upgrades table keys "AM" to whoever actually signed in (the
+     server stamps it that way on create) - a new row Kian Ming saves is
+     "Kian Ming", not his older canonical alias "George Sim". But his 11
+     historical rows are still labeled "George Sim" (kept as-is on purpose,
+     see AM_ALIAS_DEFAULT's comment), and he is the same person either way -
+     so every AM comparison below runs through canonAM() on both sides,
+     folding "Kian Ming" and "George Sim" into one identity for matching and
+     grouping. Only the raw value actually stored on a row is ever left
+     untouched (never rewritten), so the historical record stays intact. */
   const mgr = isManager(), me = myAM;
   let all = getData('upgrades');
-  if (!mgr) all = all.filter(r => r['AM'] === me);
-  const people = [...new Set(getData('upgrades').map(r => r['AM']).filter(Boolean))].sort();
+  if (!mgr) all = all.filter(r => canonAM(r['AM']) === canonAM(me));
+  const people = [...new Set(getData('upgrades').map(r => canonAM(r['AM'])).filter(Boolean))].sort();
   let f = all.slice();
   /* "open" is not a stage, it is the three stages that are still in play. It
      exists so a "Still open: 2" figure elsewhere can open exactly those two. */
   if (upStageFilter === 'open') f = f.filter(r => UP_OPEN.includes(r['Stage']));
   else if (upStageFilter === 'kivlost') f = f.filter(r => r['Stage'] === 'kiv' || r['Stage'] === 'lost');
   else if (upStageFilter !== 'all') f = f.filter(r => r['Stage'] === upStageFilter);
-  if (mgr && upWho !== 'all') f = f.filter(r => r['AM'] === upWho);
+  if (mgr && upWho !== 'all') f = f.filter(r => canonAM(r['AM']) === upWho);
   if (upSearch) { const q = upSearch.toLowerCase(); f = f.filter(r => (r['Merchant'] || '').toLowerCase().includes(q)); }
 
   const months = upMonths();
@@ -7060,9 +7093,9 @@ function renderUpgrade() {
      different month. The "Closed" card up top is the one place Closing
      Date still drives the number, since that's revenue recognised in that
      month, a separate question from when the deal was first logged. */
-  const owners = mgr && upWho === 'all' ? people : [...new Set(f.map(r => r['AM'] || 'Unassigned'))];
+  const owners = mgr && upWho === 'all' ? people : [...new Set(f.map(r => canonAM(r['AM']) || 'Unassigned'))];
   const block = own => {
-    const rows = f.filter(r => (r['AM'] || 'Unassigned') === own)
+    const rows = f.filter(r => (canonAM(r['AM']) || 'Unassigned') === own)
       .filter(r => upMonthSel !== '__all__' ? upFiledMonth(r) === upMonthSel : true)
       .sort((a, b) => (order[a['Stage']] ?? 9) - (order[b['Stage']] ?? 9)
         || String(b['Closing Date'] || '').localeCompare(String(a['Closing Date'] || '')));
@@ -7159,7 +7192,7 @@ function addUpgrade(id) {
         <input id="u-name" list="u-list" value="${esc(r ? r['Merchant'] : '')}" placeholder="e.g. kesouma.com" onchange="upNamePicked()">
         <datalist id="u-list">${merchants.map(m => `<option value="${esc(m['Account Name'] || m['Store ID'])}">`).join('')}</datalist></div>
       <div class="form-group"><label>Owner</label>${isManager()
-        ? `<select id="u-am">${(getSettings().amList || []).map(a => `<option${(r ? r['AM'] : myAM) === a ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select>`
+        ? `<select id="u-am">${assignableAmList().map(a => `<option${canonAM(r ? r['AM'] : myAM) === a ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select>`
         /* The Upgrade pipeline now lives in the shared upgrades table, keyed
            to each person's real login name (the server stamps this itself
            on create, see /api/upgrades - it never trusts the client for a
@@ -7333,12 +7366,13 @@ const TEAM_SIZE = 6;
    while there is still time to act on it. */
 const KPI_CHURN_QUARTER = 18000;
 /* KPI 2 is measured on upgrade revenue, not on earned MRR. The tracker header
-   reads "Target Revenue (RM) 8,000.00" against "Upgrade Revenue (RM)", and
-   earned MRR is a separate line underneath it. Testing the target against MRR
-   made the KPI roughly twenty times harder than the scheme intends: Liyana's
-   July was RM 16,288.05 of revenue, which clears the target, off RM 784.33 of
-   earned MRR, which never could. The money is still paid on earned MRR. */
-const KPI_UPGRADE_REVENUE = 8000, KPI_BHC_MONTH = 4, BHC_BONUS = 300;
+   used to read "Target Revenue (RM) 8,000.00" against "Upgrade Revenue (RM)",
+   raised to 10,000.00, and earned MRR is a separate line underneath it.
+   Testing the target against MRR made the KPI roughly twenty times harder
+   than the scheme intends: Liyana's July was RM 16,288.05 of revenue, which
+   clears the target, off RM 784.33 of earned MRR, which never could. The
+   money is still paid on earned MRR. */
+const KPI_UPGRADE_REVENUE = 10000, KPI_BHC_MONTH = 4, BHC_BONUS = 300;
 const UPSELL_BANDS = [
   [10000, 20000, 0.4], [20001, 35000, 0.5], [35001, Infinity, 0.6],
 ];
@@ -7416,15 +7450,15 @@ function bhcOpenRecording(sid, merchant) {
 /* ── what the app can measure ── */
 function incFigures(person, mk) {
   const q = quarterOf(mk), qMonths = monthsInQuarter(q);
-  const upAll = getData('upgrades').filter(r => r['Stage'] === 'upgraded' && r['AM'] === person);
+  const upAll = getData('upgrades').filter(r => r['Stage'] === 'upgraded' && canonAM(r['AM']) === person);
   const up = upAll.filter(r => monthKey(r['Closing Date']) === mk);
-  const churn = getData('winback').map(enrich).filter(r => r['AM'] === person);
+  const churn = getData('winback').map(enrich).filter(r => canonAM(r['AM']) === person);
   const churnM = churn.filter(r => monthKey(r['Churn Date']) === mk);
   const churnQ = churn.filter(r => qMonths.includes(monthKey(r['Churn Date'])));
   const lost = rows => rows.reduce((a, r) => a + (Number(r['Churn MRR']) || 0), 0);
   const bhc = bhcDoneIn(person, mk);
   const rescued = ['winback', 'risk'].reduce((a, t) => a + getData(t)
-    .filter(r => r['AM'] === person && monthKey(r['Renewed At']) === mk)
+    .filter(r => canonAM(r['AM']) === person && monthKey(r['Renewed At']) === mk)
     .reduce((b, r) => b + (Number(r['Renewed MRR']) || 0), 0), 0);
   return {
     q, month: mk,
@@ -9227,7 +9261,7 @@ function bhcSave(rec) {
 function bhcWeekOf(ds) { const d = new Date(ds || todayKey()); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return dKey(d); }
 function bhcMonths() { return typeof incMonths === 'function' ? incMonths().slice(0, 8) : [monthKey(todayKey())]; }
 function bhcMonthCounts(person, mk) {
-  const rows = bhcRows().filter(r => r['AM'] === person);
+  const rows = bhcRows().filter(r => canonAM(r['AM']) === person);
   return {
     research: rows.filter(r => r['Research Date'] && monthKey(r['Research Date']) === mk).length,
     outreach: rows.filter(r => r['Outreach Date'] && monthKey(r['Outreach Date']) === mk).length,
@@ -9241,15 +9275,21 @@ function renderHealthCheck() {
   if (!months.includes(bhcMonthSel)) bhcMonthSel = months[0];
   const mk = bhcMonthSel;
   let all = bhcRows();
-  if (!mgr) all = all.filter(r => r['AM'] === me);
-  const people = [...new Set(bhcRows().map(r => r['AM']).filter(Boolean))].sort();
+  /* Both sides run through canonAM(): the "Advisor" field on a new check
+     used to be an editable dropdown that could save a record under either
+     a person's real name or their older canonical alias (see the fix in
+     bhcStart()), so two records for the same person can carry different
+     raw labels - without folding them together here, a non-manager's own
+     health checks could vanish from their own filtered list. */
+  if (!mgr) all = all.filter(r => canonAM(r['AM']) === me);
+  const people = [...new Set(bhcRows().map(r => canonAM(r['AM'])).filter(Boolean))].sort();
   let f = all.slice();
   /* a merchant belongs to a given month if any of its health-check dates fall
      in it — research, outreach or session. Without this, picking a month only
      moved the KPI numbers above while the list underneath stayed unfiltered. */
   f = f.filter(r => [r['Research Date'], r['Outreach Date'], r['Session Date']].some(d => d && monthKey(d) === mk));
   if (bhcStageFilter !== 'all') f = f.filter(r => r['Stage'] === bhcStageFilter);
-  if (mgr && bhcWho !== 'all') f = f.filter(r => r['AM'] === bhcWho);
+  if (mgr && bhcWho !== 'all') f = f.filter(r => canonAM(r['AM']) === bhcWho);
   f.sort((a, b) => bhcPriorityTotal(b) - bhcPriorityTotal(a) || String(a['Merchant']).localeCompare(String(b['Merchant'])));
 
   const scope = mgr && bhcWho === 'all' ? people : [mgr ? bhcWho : me].filter(Boolean);
@@ -9368,7 +9408,20 @@ function bhcStart() {
       <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Not in the list? Type the name anyway - it's recorded without a Store ID.</p>
     </div>
     <div class="form-grid form-2">
-      <div class="form-group"><label>Advisor</label><select id="bh-am">${(getSettings().amList || []).map(a => `<option${canonAM(myAM) === a ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Advisor</label>${mgr
+        ? `<select id="bh-am">${assignableAmList().map(a => `<option${canonAM(myAM) === a ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select>`
+        /* Same bug the Upgrade pipeline's Owner field had (see addUpgrade()):
+           amList lists a person's real name and their older canonical
+           alias as if they were two separate, independently pickable
+           people, so an editable dropdown here let a health check get
+           saved under the wrong one of the two - and every AM-scoped view
+           of Health check (My day, the queue, Performance) filters by the
+           canonical identity, so a record saved under the "other" name
+           quietly disappeared from all of them. A health check is always
+           logged under your own book, so this is a label now, not a real
+           choice, for anyone but a manager. */
+        : `<input id="bh-am" value="${esc(canonAM(myAM))}" disabled style="background:var(--bg,#f4f6fb);color:var(--muted)">`
+      }</div>
       <div class="form-group"><label>Research date</label><input id="bh-date" type="date" value="${todayKey()}"></div>
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end">
@@ -9754,13 +9807,19 @@ function daysBetween(a, b) {
 /* A work-from-home day is not an absence: the person is still working, just
    not in the office. So it never counts as "out" - My day keeps running,
    nothing gets covered, nothing pauses. */
+/* canonAM() on both sides: a time-off row's "Person" is always the real
+   login name the server stamps it with ("Kian Ming"), while callers here
+   (My day's agendaFor, via personName(k)) pass the canonical roster name
+   ("George Sim") - without folding them together, a person's own booked
+   leave or work-from-home day would silently not be recognised on their
+   own agenda. */
 function leaveOn(person, dateKey) {
-  return leaveRows().filter(r => r['Person'] === person && r['Type'] !== WFH_TYPE && dateKey >= r['From'] && dateKey <= r['To'])[0] || null;
+  return leaveRows().filter(r => canonAM(r['Person']) === canonAM(person) && r['Type'] !== WFH_TYPE && dateKey >= r['From'] && dateKey <= r['To'])[0] || null;
 }
 function whoIsOut(dateKey) { return leaveRows().filter(r => r['Type'] !== WFH_TYPE && dateKey >= r['From'] && dateKey <= r['To']); }
 function whoIsWFH(dateKey) { return leaveRows().filter(r => r['Type'] === WFH_TYPE && dateKey >= r['From'] && dateKey <= r['To']); }
 function wfhOn(person, dateKey) {
-  return leaveRows().filter(r => r['Person'] === person && r['Type'] === WFH_TYPE && dateKey >= r['From'] && dateKey <= r['To'])[0] || null;
+  return leaveRows().filter(r => canonAM(r['Person']) === canonAM(person) && r['Type'] === WFH_TYPE && dateKey >= r['From'] && dateKey <= r['To'])[0] || null;
 }
 function workingDays(from, to) {
   return daysBetween(from, to).filter(d => { const n = new Date(d).getDay(); return n >= 1 && n <= 5; }).length;
@@ -9791,7 +9850,7 @@ function leaveMessage(r) {
   }
   const days = workingDays(r['From'], r['To']);
   const q = buildQueue(r['Person']).length;
-  const bhc = getData('bhc').filter(x => x['AM'] === r['Person'] && x['Session Date'] &&
+  const bhc = getData('bhc').filter(x => canonAM(x['AM']) === canonAM(r['Person']) && x['Session Date'] &&
     x['Session Date'] >= r['From'] && x['Session Date'] <= r['To']);
   return [
     `*${r['Person']} is out ${dLong(new Date(r['From']))}` + (r['From'] === r['To'] ? '' : ` to ${dLong(new Date(r['To']))}`) + `*  ·  ${r['Type']}`,
@@ -9866,7 +9925,7 @@ function leaveGrid() {
          falls back to starting a new booking same as before. */
       const dayRecords = [...out, ...wfh];
       const viewer = canonAM(myAM);
-      let editable = dayRecords.find(x => x['Person'] === viewer);
+      let editable = dayRecords.find(x => canonAM(x['Person']) === viewer);
       if (!editable && isManager() && dayRecords.length === 1) editable = dayRecords[0];
       const cellClick = editable
         ? `addLeave(null,${editable['Type'] === WFH_TYPE},'${editable['ID']}')`
@@ -9892,7 +9951,10 @@ function renderTimeOff() {
      track - the calendar still shows it, but the Bookings table below is
      for actual leave that changes who is reachable. */
   let f = all.filter(r => r['Type'] !== WFH_TYPE);
-  if (leaveWho !== 'all') f = f.filter(r => r['Person'] === leaveWho);
+  /* leaveWho comes from timeoffRoster(), the canonical roster names - a
+     booking's own "Person" is the real login name the server stamps it
+     with, so canonAM() on the row's side is needed to match it up. */
+  if (leaveWho !== 'all') f = f.filter(r => canonAM(r['Person']) === leaveWho);
   const today = todayKey();
   const outNow = whoIsOut(today);
   const wfhNow = whoIsWFH(today);
@@ -9954,11 +10016,11 @@ function renderTimeOff() {
               <td style="font-size:11.5px">${esc(r['To'])}</td>
               <td>${workingDays(r['From'], r['To'])}</td>
               <td>${isWfh ? '<span class="ms">not needed</span>' : (coverLabel(r) ? esc(coverLabel(r)) : '<span style="color:var(--pink);font-weight:600;font-size:11.5px">none named</span>')}</td>
-              <td style="font-size:12px;max-width:200px;white-space:normal">${mgr || r['Person'] === me ? esc(r['Note']) : (r['Note'] ? '<span class="ms">private</span>' : '')}</td>
+              <td style="font-size:12px;max-width:200px;white-space:normal">${mgr || canonAM(r['Person']) === me ? esc(r['Note']) : (r['Note'] ? '<span class="ms">private</span>' : '')}</td>
               <td>${r['Slack'] === 'sent' ? '<span class="chip c-ok">dispatched</span>' : r['Slack'] === 'failed' ? '<span class="chip c-high">failed</span>' : '<span class="ms">not sent</span>'}</td>
               <td style="white-space:nowrap">
                 ${!isWfh ? `<button class="btn btn-xs btn-ghost" onclick="leaveNotice('${r['ID']}')">Notice</button>` : ''}
-                ${mgr || r['Person'] === me ? `<button class="btn btn-xs btn-ghost" onclick="addLeave(null,${isWfh},'${r['ID']}')">Edit</button>
+                ${mgr || canonAM(r['Person']) === me ? `<button class="btn btn-xs btn-ghost" onclick="addLeave(null,${isWfh},'${r['ID']}')">Edit</button>
                 <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="delLeave('${r['ID']}')">Delete</button>` : ''}</td>
             </tr>`; }).join('')}</tbody>
       </table></div>
@@ -10110,15 +10172,15 @@ function lvSync() {
   const who = document.getElementById('lv-who').value;
   if (isWfh) {
     const wk = bhcWeekOf(from);
-    const clash = leaveRows().filter(r => r['Person'] === who && r['Type'] === WFH_TYPE && bhcWeekOf(r['From']) === wk && r['ID'] !== lvEditId)[0];
+    const clash = leaveRows().filter(r => canonAM(r['Person']) === canonAM(who) && r['Type'] === WFH_TYPE && bhcWeekOf(r['From']) === wk && r['ID'] !== lvEditId)[0];
     el.innerHTML = clash
       ? `<div class="blocked" style="margin-bottom:12px"><b style="color:var(--pink)">${esc(who)} already has a work-from-home day this week</b>, on ${esc(clash['From'])}. Saving replaces it with ${esc(from)}.</div>`
       : '';
     return;
   }
   const days = daysBetween(from, document.getElementById('lv-to').value || from);
-  const bhc = getData('bhc').filter(x => x['AM'] === who && x['Session Date'] && days.includes(x['Session Date']));
-  const fu = getData('bhc').filter(x => x['AM'] === who && x['Next Follow Up'] && days.includes(x['Next Follow Up']));
+  const bhc = getData('bhc').filter(x => canonAM(x['AM']) === canonAM(who) && x['Session Date'] && days.includes(x['Session Date']));
+  const fu = getData('bhc').filter(x => canonAM(x['AM']) === canonAM(who) && x['Next Follow Up'] && days.includes(x['Next Follow Up']));
   const q = buildQueue(who).length;
   el.innerHTML = `<div class="blocked" style="margin-bottom:12px">
     <b style="color:var(--navy)">${workingDays(from, document.getElementById('lv-to').value || from)} working day(s).</b>
@@ -10138,7 +10200,7 @@ async function saveLeave() {
 
   if (isWfh) {
     const wk = bhcWeekOf(from);
-    const clashes = leaveRows().filter(r => r['Person'] === who && r['Type'] === WFH_TYPE && bhcWeekOf(r['From']) === wk && r['ID'] !== lvEditId);
+    const clashes = leaveRows().filter(r => canonAM(r['Person']) === canonAM(who) && r['Type'] === WFH_TYPE && bhcWeekOf(r['From']) === wk && r['ID'] !== lvEditId);
     if (clashes.length) {
       if (!confirm(who + ' already has a work-from-home day this week (' + clashes[0]['From'] + '). Replace it with ' + from + '?')) return;
       for (const c of clashes) {
@@ -10552,8 +10614,8 @@ function perfFigures(person, mk) {
   const bhcSummarised = bhcAll.filter(x => x.summarised);
   const research = getData('bhc').filter(r => canonAM(r['AM']) === person && inMonth(r['Research Date']));
 
-  const up = getData('upgrades').filter(r => r['AM'] === person && r['Stage'] === 'upgraded' && inMonth(r['Closing Date']));
-  const pipeline = getData('upgrades').filter(r => r['AM'] === person && UP_OPEN.includes(r['Stage']));
+  const up = getData('upgrades').filter(r => canonAM(r['AM']) === person && r['Stage'] === 'upgraded' && inMonth(r['Closing Date']));
+  const pipeline = getData('upgrades').filter(r => canonAM(r['AM']) === person && UP_OPEN.includes(r['Stage']));
 
   const renewed = ['winback', 'risk'].flatMap(t => getData(t)
     .filter(r => canonAM(r['AM']) === person && inMonth(r['Renewed At'])));
@@ -11850,7 +11912,7 @@ function addEsc() {
  <div class="form-group"><label>Issue *</label><textarea id="f-issue" placeholder="what is stuck, and what has already been tried"></textarea></div>
  <div class="form-grid form-2">
  <div class="form-group"><label>Severity</label><select id="f-sev">${['Critical', 'High', 'Medium', 'Low'].map(x => `<option>${x}</option>`).join('')}</select></div>
- <div class="form-group"><label>Assigned to</label><select id="f-asg"><option value=""></option>${(getSettings().amList || []).map(a => `<option>${esc(a)}</option>`).join('')}</select></div>
+ <div class="form-group"><label>Assigned to</label><select id="f-asg"><option value=""></option>${assignableAmList().map(a => `<option>${esc(a)}</option>`).join('')}</select></div>
  </div>
  <div class="form-group"><label>Crisp conversation link (optional)</label><input id="f-crisp" placeholder="https://app.crisp.chat/website/…/inbox/…"></div>
  <div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-navy" onclick="saveEsc()">Save</button></div>`,
@@ -13496,13 +13558,13 @@ function updateBadges() {
   setBadge('b-bhc', getData('bhc').filter(r => ['research', 'scored', 'outreach', 'scheduled'].includes(r['Stage'])).length, true);
   /* AM-scoped for a non-manager, same as b-claim/b-proof below - otherwise
      the sidebar number is everyone's open pipeline, not "yours", and can
-     look right by pure coincidence while the page itself (which is scoped
-     to r['AM'] === you) shows something completely different. Compared
-     against the real login name (myAM), not canonAM(myAM): the shared
-     upgrades table is keyed to real names throughout (the server stamps
-     it that way on create), it does not carry over the older canonical
-     alias some other, still-local modules use. */
-  setBadge('b-up', getData('upgrades').filter(r => UP_OPEN.includes(r['Stage']) && (isManager() || r['AM'] === myAM)).length, true);
+     look right by pure coincidence while the page itself shows something
+     completely different. Both sides run through canonAM(): a row's "AM"
+     may be a real login name ("Kian Ming", stamped by the server on create)
+     or an older canonical alias ("George Sim", kept as-is on historical
+     rows) - canonAM() folds both onto the same identity, the same as every
+     other AM comparison in the Upgrade module (see renderUpgrade()). */
+  setBadge('b-up', getData('upgrades').filter(r => UP_OPEN.includes(r['Stage']) && (isManager() || canonAM(r['AM']) === canonAM(myAM))).length, true);
   setBadge('b-claim', pendingClaimCount(isManager() ? null : canonAM(myAM)), true);
   setBadge('b-proof', (isManager() ? evidenceItems() : evidenceItems().filter(x => x.who === canonAM(myAM))).length, true);
   if (isManager())

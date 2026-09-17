@@ -9377,7 +9377,8 @@ function renderHealthCheck() {
             <option value="all"${bhcWho === 'all' ? ' selected' : ''}>Everyone</option>
             ${people.map(p => `<option value="${esc(p)}"${bhcWho === p ? ' selected' : ''}>${esc(p)}</option>`).join('')}
           </select></label>` : ''}
-      <button class="btn btn-navy btn-sm" style="margin-left:auto" onclick="bhcStart()">Start a diagnosis</button>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="bhcQuickStart()">Quick record</button>
+      <button class="btn btn-navy btn-sm" style="margin-left:8px" onclick="bhcStart()">Start a diagnosis</button>
     </div>
 
     <div class="section">
@@ -9388,7 +9389,7 @@ function renderHealthCheck() {
           ? `<tr><td colspan="10"><div class="empty"><div class="big">Nothing here yet</div><p>${all.length ? 'Nothing matches this filter.' : 'Start a diagnosis on a merchant and it appears here.'}</p></div></td></tr>`
           : f.map(r => { const tot = bhcTotal(r), band = bhcBand(tot), pri = bhcPriorityTotal(r);
             return `<tr>
-              <td><b style="color:var(--navy)">${esc(r['Merchant'])}</b>${r['Store ID'] ? `<div class="ms">${consoleLink(r['Store ID'])}</div>` : ''}</td>
+              <td><b style="color:var(--navy)">${esc(r['Merchant'])}</b>${r.QuickRecord ? ' <span class="chip c-plan" style="font-size:9.5px;vertical-align:middle">Quick record</span>' : ''}${r['Store ID'] ? `<div class="ms">${consoleLink(r['Store ID'])}</div>` : ''}</td>
               <td>${bhcStageChip(r['Stage'])}</td>
               <td style="white-space:nowrap">${pri ? `<span class="bar"><i style="width:${(pri / 25) * 100}%;background:${pri >= 18 ? 'var(--green)' : pri >= 12 ? 'var(--amber)' : '#C3CEDF'}"></i></span>${pri}/25` : '<span class="ms">not scored</span>'}</td>
               <td style="white-space:nowrap">${bhcScored(r) ? `<b style="color:var(--navy)">${tot}</b><span class="ms">/100</span> <span class="chip ${band[4]}">${band[2]}</span>` : '<span class="ms">not scored</span>'}</td>
@@ -9496,6 +9497,84 @@ function bhcCreate() {
     Situation: '', Improvement: '', MerchantActions: '', AdvisorActions: '',
   };
   bhcSave(rec); closeModal(); render(); bhcWorkspace(rec['ID']);
+}
+
+/* ── quick record ──
+   Not every conversation needs the four-tab research/score/diagnose/
+   session framework - sometimes it's just a check-in worth having on
+   record: when it happened, what came up, done. This writes the exact
+   same kind of row bhcCreate() does (so it counts toward the Completed
+   BHC sessions KPI, shows up in the Merchants list, and can still be
+   opened and expanded into a full diagnosis later if it turns out to
+   need one) - it just skips straight to Stage 'completed' (or
+   'followup' if a next date is given) instead of starting at 'research'
+   with everything blank. QuickRecord: true only drives the small
+   "Quick record" tag in the list; nothing downstream depends on it. */
+function bhcQuickStart() {
+  const mgr = isManager(), me = canonAM(myAM);
+  const have = new Set(bhcRows().map(r => String(r['Store ID'])));
+  const pool = merchantRows()
+    .filter(m => m._kind !== 'churned')
+    .filter(m => !have.has(String(m['Store ID'])))
+    .filter(m => mgr || canonAM(m['AM']) === me)
+    .sort((a, b) => String(a['Account Name'] || '').localeCompare(String(b['Account Name'] || '')));
+  bhcPickMap = {};
+  pool.forEach(m => {
+    const label = `${m['Account Name'] || 'Store ' + m['Store ID']} · ${m['Store ID']}${mgr && m['AM'] ? ' · ' + m['AM'] : ''}`;
+    bhcPickMap[label] = m;
+  });
+  openModal('Quick health check record', `
+    <p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;line-height:1.6">For a check-in that doesn't need the full research/score/diagnosis framework - just a record of when it happened and what was discussed. Pick a merchant${mgr ? '' : ', from your own book'}. Already has a fuller record? Open it from the list and use Save and close there instead.</p>
+    <div class="form-group"><label>Merchant *</label>
+      <input id="bhq-pick" list="bhq-pick-list" autocomplete="off" placeholder="Type a merchant name or Store ID…">
+      <datalist id="bhq-pick-list">${Object.keys(bhcPickMap).map(l => `<option value="${esc(l)}">`).join('')}</datalist>
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0">Not in the list? Type the name anyway - it's recorded without a Store ID.</p>
+    </div>
+    <div class="form-grid form-2">
+      <div class="form-group"><label>Advisor</label>${mgr
+        ? `<select id="bhq-am">${assignableAmList().map(a => `<option${canonAM(myAM) === a ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select>`
+        : `<input id="bhq-am" value="${esc(canonAM(myAM))}" disabled style="background:var(--bg,#f4f6fb);color:var(--muted)">`
+      }</div>
+      <div class="form-group"><label>When was it done? *</label><input id="bhq-date" type="date" value="${todayKey()}"></div>
+    </div>
+    <div class="form-group"><label>What was discussed?</label>
+      <textarea id="bhq-notes" placeholder="A quick summary of the conversation - what came up, what they need, anything worth remembering."></textarea></div>
+    <div class="form-group"><label>Next follow-up (optional)</label><input id="bhq-followup" type="date"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-green" onclick="bhcQuickSave()">Mark done</button></div>`);
+}
+function bhcQuickSave() {
+  const raw = (document.getElementById('bhq-pick').value || '').trim();
+  if (!raw) { alert('Pick a merchant, or type a name.'); return; }
+  const date = document.getElementById('bhq-date').value;
+  if (!date) { alert('Pick the date it was done.'); return; }
+  const m = bhcPickMap[raw] || null;
+  const name = m ? (m['Account Name'] || 'Store ' + m['Store ID']) : raw;
+  const am = document.getElementById('bhq-am').value;
+  const followUp = document.getElementById('bhq-followup').value || '';
+  const rec = {
+    ID: uuid(), 'Store ID': m ? m['Store ID'] : '', Merchant: name,
+    AM: am, Stage: followUp ? 'followup' : 'completed',
+    'Research Date': '', 'Outreach Date': '', 'Session Date': date, 'Next Follow Up': followUp,
+    Website: '', Industry: '', Model: '', Plan: m ? planLabel(m['Plan Type']) : '', Expiry: m ? m['Renewal Date'] || '' : '',
+    backend: {}, channels: {}, priority: {}, score: {}, Leakage: '',
+    Findings: ['', '', ''], Focus: '', Features: '', NextAction: '',
+    Situation: '', Improvement: '', MerchantActions: '', AdvisorActions: '',
+    Remark: document.getElementById('bhq-notes').value.trim(),
+    QuickRecord: true,
+  };
+  bhcSave(rec);
+  /* Same side effect bhcCommit() has for a completed session: the linked
+     at-risk row's Last Health Check needs updating too, or the churn
+     queue and risk list would have no idea this merchant was just
+     checked in on. */
+  if (rec['Store ID']) {
+    const rows = getData('risk');
+    const mm = rows.filter(x => String(x['Store ID']) === String(rec['Store ID']))[0];
+    if (mm) { mm['Last Health Check'] = date; mm['Health Check By'] = am; setData('risk', rows); }
+  }
+  closeModal(); render();
 }
 
 /* ── the workspace ── */
@@ -12549,7 +12628,22 @@ function importProgress(ev) {
             return;
           }
           if (!cur['Updated At'] || new Date(inc['Updated At'] || 0) > new Date(cur['Updated At'])) {
+            /* Every browser seeds the FULL merchant list (ensureRiskSeeded()
+               pulls in every ACTIVE_STORES id, not just the ones this person
+               owns) - renderRisk()/renderWinback() just filter the view down
+               to "AM === me" for non-managers. That means someone else's
+               export can easily contain a row for a store that is really
+               yours, with their (blank/wrong/stale) copy of the Owner field.
+               Object.assign-ing that in used to silently reassign the store
+               away from its real owner - it never got deleted, it just
+               stopped matching "AM === me" and vanished from that person's
+               own filtered view, which looked exactly like the row was
+               gone. A merge is for reconciling status/contact history, not
+               for reassigning who owns a store, so Owner is now preserved
+               whenever the row already has one. */
+            const keepAM = cur['AM'];
             Object.assign(cur, inc);
+            if (keepAM) cur['AM'] = keepAM;
             n++;
           }
         });

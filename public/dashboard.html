@@ -6778,8 +6778,11 @@ function renderDay() {
      on My performance, which counts only recorded sessions. One number, one
      place: it belongs on the report, not on the day. */
   document.getElementById('tr').style.width = (total ? (done / total) * 100 : 0) + '%';
-  document.getElementById('whoName').textContent = p.name;
-  document.getElementById('whoRole').textContent = p.team;
+  /* whoName/whoRole used to be their own labels here before the name+role
+     moved into dayEb above - the elements were removed from the HTML but
+     these two lines were left behind, throwing on the missing ids and
+     aborting the rest of renderDay() before it reached the agenda list
+     below. That's what was leaving My day blank for everyone. */
 
   if (dayMode === 'month') {
     document.getElementById('agenda').innerHTML = grid;

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { db } from '../../../../lib/db';
 import { verifySession, SESSION_COOKIE } from '../../../../lib/auth';
+import { canonAM } from '../../../../lib/canonAM';
 
 async function requireUser() {
   const token = cookies().get(SESSION_COOKIE)?.value;
@@ -61,7 +62,11 @@ export async function PATCH(req, { params }) {
 
   const { rows: existingRows } = await db().query('select am from upgrades where id = $1', [params.id]);
   if (!existingRows.length) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
-  if (me.role !== 'manager' && existingRows[0].am !== me.name) {
+  /* canonAM() on both sides: a row can be filed under an older aliased
+     spelling (see lib/canonAM.js) than the name that shows up in this
+     person's own session, and a raw comparison would 403 someone editing
+     their own record. */
+  if (me.role !== 'manager' && canonAM(existingRows[0].am) !== canonAM(me.name)) {
     return NextResponse.json({ error: 'Not allowed.' }, { status: 403 });
   }
 
@@ -99,7 +104,7 @@ export async function DELETE(req, { params }) {
 
   const { rows: existingRows } = await db().query('select am from upgrades where id = $1', [params.id]);
   if (!existingRows.length) return NextResponse.json({ ok: true });
-  if (me.role !== 'manager' && existingRows[0].am !== me.name) {
+  if (me.role !== 'manager' && canonAM(existingRows[0].am) !== canonAM(me.name)) {
     return NextResponse.json({ error: 'Not allowed.' }, { status: 403 });
   }
 

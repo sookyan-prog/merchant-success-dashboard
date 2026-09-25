@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { db } from '../../../../lib/db';
 import { verifySession, SESSION_COOKIE } from '../../../../lib/auth';
+import { canonAM } from '../../../../lib/canonAM';
 
 async function requireUser() {
   const token = cookies().get(SESSION_COOKIE)?.value;
@@ -41,7 +42,7 @@ export async function PATCH(req, { params }) {
 
   const { rows: existingRows } = await db().query('select person from time_off where id = $1', [params.id]);
   if (!existingRows.length) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
-  if (me.role !== 'manager' && existingRows[0].person !== me.name) {
+  if (me.role !== 'manager' && canonAM(existingRows[0].person) !== canonAM(me.name)) {
     return NextResponse.json({ error: 'Not allowed.' }, { status: 403 });
   }
 
@@ -82,7 +83,7 @@ export async function DELETE(req, { params }) {
 
   const { rows: existingRows } = await db().query('select person from time_off where id = $1', [params.id]);
   if (!existingRows.length) return NextResponse.json({ ok: true });
-  if (me.role !== 'manager' && existingRows[0].person !== me.name) {
+  if (me.role !== 'manager' && canonAM(existingRows[0].person) !== canonAM(me.name)) {
     return NextResponse.json({ error: 'Not allowed.' }, { status: 403 });
   }
 

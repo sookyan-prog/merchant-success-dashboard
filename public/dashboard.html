@@ -10904,7 +10904,7 @@ function showMerchantDetail(sid) {
       <tr><td><b style="color:var(--navy)">Plan</b></td><td>${r['Plan Type'] ? planLabel(r['Plan Type']) + (r['Plan Tier'] ? ' · ' + esc(r['Plan Tier']) : '') : 'n/a'}</td></tr>
       <tr><td><b style="color:var(--navy)">Lifecycle</b></td><td>${lifecycleLabel(r)}</td></tr>
       <tr><td><b style="color:var(--navy)">Churn signal</b></td><td>${r._kind === 'churned' ? `<span class="chip c-high">Churned ${daysSince(r['Churn Date'])}d</span>` : tierChip(r._tier)}</td></tr>
-      <tr><td><b style="color:var(--navy)">Renewal</b></td><td>${esc(r['Renewal Date'] || 'n/a')}</td></tr>
+      <tr><td><b style="color:var(--navy)">${r._kind === 'churned' ? 'Lapsed' : 'Renewal'}</b></td><td>${esc(merchantExpiry(r) || 'n/a')}</td></tr>
       <tr><td><b style="color:var(--navy)">Owner</b></td><td>${r['AM'] ? esc(r['AM']) : 'unassigned'}</td></tr>
       ${u ? `<tr><td><b style="color:var(--navy)">Upgrade</b></td><td>${upStageChip(u['Stage'])}${u['Value'] ? ' · ' + rm(u['Value']) : ''}</td></tr>` : ''}
     </tbody></table></div>
@@ -12201,6 +12201,18 @@ function spineFor(r) {
   if (['urgent', 'critical', 'high'].includes(r._tier)) return bar(4, 'r') + '<div class="sl">At risk</div>';
   return bar(3, '') + '<div class="sl">Live &amp; supported</div>';
 }
+/* A churned row never carries a "Renewal Date" - there's no upcoming
+   renewal for a subscription that already lapsed, so the field is simply
+   never set for anything sourced from winback (see syncAll()'s addWb
+   shape). The Merchants list Expiry column read that field directly, so
+   every churned row showed n/a even though the date they lapsed IS on
+   file, just under "Churn Date" instead - shown separately as "Churned
+   Xd" in the Churn signal column but not surfaced here. This is what the
+   Expiry column should read: the merchant's actual on-file plan date,
+   whichever field holds it for that kind of row. */
+function merchantExpiry(r) {
+  return r['Renewal Date'] || (r._kind === 'churned' ? r['Churn Date'] : '') || '';
+}
 function renderMerchants() {
   const all = merchantRows();
   let f = applyFilters('mer', all);
@@ -12245,7 +12257,7 @@ function renderMerchants() {
      ? `<span class="chip c-high">Churned ${daysSince(r['Churn Date'])}d</span>`
      : tierChip(r._tier)
  }</td>
- <td style="font-size:11.5px">${r['Renewal Date'] ? `<span style="${(new Date(r['Renewal Date']) - TODAY) / 86400000 < 0 ? 'color:var(--pink);font-weight:600' : ''}">${esc(r['Renewal Date'])}</span>` : '<span style="color:#bbb">n/a</span>'}</td>
+ <td style="font-size:11.5px">${merchantExpiry(r) ? `<span style="${(new Date(merchantExpiry(r)) - TODAY) / 86400000 < 0 ? 'color:var(--pink);font-weight:600' : ''}">${esc(merchantExpiry(r))}</span>` : '<span style="color:#bbb">n/a</span>'}</td>
  <td style="font-size:11.5px">${r['Phone'] ? (waDigits(r['Phone']) ? `<a href="https://wa.me/${waDigits(r['Phone'])}" target="_blank" rel="noopener" title="Open in WhatsApp" style="color:var(--green,#25b268);text-decoration:none">${esc(r['Phone'])}</a>` : esc(r['Phone'])) : '<span style="color:#bbb">n/a</span>'}<br><button class="btn btn-xs btn-ghost" style="padding:1px 6px;margin-top:2px" onclick="editMerchantContact('${jsAttr(r['Store ID'])}')">Edit</button></td>
  <td style="font-size:11.5px">${r['Email'] ? esc(r['Email']) : '<span style="color:#bbb">n/a</span>'}<br><button class="btn btn-xs btn-ghost" style="padding:1px 6px;margin-top:2px" onclick="editMerchantContact('${jsAttr(r['Store ID'])}')">Edit</button></td>
  <td>${r['AM'] ? esc(r['AM']) : '<span style="color:var(--pink);font-weight:600;font-size:11.5px">unassigned</span>'}</td>
@@ -12298,7 +12310,7 @@ function exportMerchants() {
   const cols = ['Store ID', 'Account Name', 'Plan Tier', 'Plan Type', 'Renewal Date', 'Phone', 'Email', 'AM'];
   const header = ['Store ID', 'Account Name', 'Plan', 'Plan Cycle', 'Expiry Date', 'Phone', 'Email', 'Owner'];
   const lines = [header.map(csvCell).join(',')]
-    .concat(f.map(r => cols.map(c => csvCell(r[c])).join(',')));
+    .concat(f.map(r => cols.map(c => csvCell(c === 'Renewal Date' ? merchantExpiry(r) : r[c])).join(',')));
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);

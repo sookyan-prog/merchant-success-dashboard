@@ -12065,7 +12065,13 @@ function merchantRows() {
     seen.add(s);
     out.push(r);
   });
-  if (typeof merchantsMasterRows === 'function') {
+  /* Built once and reused below for two separate gaps, rather than calling
+     merchantsMasterRows() (which maps over the whole ~2,400-row book) twice
+     per render. */
+  const master = typeof merchantsMasterRows === 'function' ? merchantsMasterRows() : [];
+  const masterBySid = {};
+  master.forEach(m => { masterBySid[String(m['Store ID'])] = m; });
+  master.forEach(m => {
     /* Only the risk/winback rows above went through enrich() before this
        fix - the master book underneath (the other ~2,300 merchants with no
        churn/risk signal logged) got pushed in raw, so the console-sourced
@@ -12073,26 +12079,38 @@ function merchantRows() {
        already flagged as at-risk or churned showed a number, and every page
        past the first (mostly plain book rows) showed "n/a" even for
        merchants the console crawl did find a contact for. */
-    merchantsMasterRows().forEach(m => {
-      const s = String(m['Store ID']);
-      if (seen.has(s)) return;
-      seen.add(s);
-      out.push({ ...enrich(m), _kind: 'live', _tier: null });
-    });
-  }
+    const s = String(m['Store ID']);
+    if (seen.has(s)) return;
+    seen.add(s);
+    out.push({ ...enrich(m), _kind: 'live', _tier: null });
+  });
   /* A manager-entered correction (Merchants list > Edit, under Phone/Email)
      always wins here, over both the console pull and whatever the imported
      row already had - this is the one place every merchant listing reads
      from, so overlaying it here means Copy, Export, the churn queue and the
-     detail view all pick up the fix without each needing its own logic. */
+     detail view all pick up the fix without each needing its own logic.
+
+     Plan/Plan cycle get the same "fill the gap from the master book" pass
+     as phone/email: a risk row seeded from a bare renewal-date list (see
+     ensureRiskSeeded()) only had a real plan tier for the handful of
+     merchants ACTIVE_STORES_PLAN happens to name, so most seeded rows sat
+     with an empty Plan Tier even when that same Store ID has a real plan on
+     file in the master book - that's why Plan showed n/a for merchants
+     Standard/Essential/etc. was sitting right there for. */
   const cc = campaignContacts();
   return out.map(r => {
-    const manual = cc[String(r['Store ID'])];
-    if (!manual || (!manual.phone && !manual.email)) return r;
+    const sid = String(r['Store ID']);
+    const manual = cc[sid];
+    const m = masterBySid[sid];
+    const needsContact = manual && (manual.phone || manual.email);
+    const needsPlan = m && (!r['Plan Tier'] || !r['Plan Type']);
+    if (!needsContact && !needsPlan) return r;
     return {
       ...r,
-      Phone: manual.phone || r['Phone'],
-      Email: manual.email || r['Email'],
+      Phone: (manual && manual.phone) || r['Phone'],
+      Email: (manual && manual.email) || r['Email'],
+      'Plan Tier': r['Plan Tier'] || (m && m['Plan Tier']) || r['Plan Tier'],
+      'Plan Type': r['Plan Type'] || (m && m['Plan Type']) || r['Plan Type'],
     };
   });
 }
@@ -14309,16 +14327,26 @@ document.addEventListener('visibilitychange', function () {
 
 /* ── init ── */
 (async function () {
-  await loadRealIdentity();
-  await loadConsoleRetention();
-  await loadChurnStores();
-  await loadUpgrades();
-  await loadTimeOff();
-  await loadCampaignActivities();
-  await loadCampaignContacts();
-  await loadEscalations();
-  await loadProofs();
-  await loadRecs();
+  /* These 10 loaders each fetch their own endpoint and write to their own
+     global (LIVE_UPGRADES, LIVE_TIMEOFF, etc.) with nothing downstream of
+     one read by another, so nothing here actually needed to wait its turn -
+     they were run one at a time regardless, which meant login latency was
+     the SUM of 10 round trips instead of the time of the slowest one. This
+     is the same Promise.all pollLiveData()/refreshLiveData() already use
+     for the 7 that overlap, just also covering the 3 that only ever ran at
+     boot (identity, console retention, churn stores). */
+  await Promise.all([
+    loadRealIdentity(),
+    loadConsoleRetention(),
+    loadChurnStores(),
+    loadUpgrades(),
+    loadTimeOff(),
+    loadCampaignActivities(),
+    loadCampaignContacts(),
+    loadEscalations(),
+    loadProofs(),
+    loadRecs(),
+  ]);
   loadLogsLocal();
   migrateOrphanedProofsAndRecs();
   preLaunchReset();

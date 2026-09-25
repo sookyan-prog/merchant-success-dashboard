@@ -7366,7 +7366,22 @@ function addUpgrade(id) {
         <input id="u-name" list="u-list" value="${esc(r ? r['Merchant'] : '')}" placeholder="e.g. kesouma.com" onchange="upNamePicked()">
         <datalist id="u-list">${merchants.map(m => `<option value="${esc(m['Account Name'] || m['Store ID'])}">`).join('')}</datalist></div>
       <div class="form-group"><label>Owner</label>${isManager()
-        ? `<select id="u-am">${assignableAmList().map(a => `<option${canonAM(r ? r['AM'] : myAM) === a ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select>`
+        ? (() => {
+            /* If the row's current owner doesn't cleanly match any option
+               here (a spelling canonAM() doesn't know about, or blank),
+               the browser falls back to silently pre-selecting the FIRST
+               option in the list the moment this modal opens - and saving
+               without ever touching this field would then quietly
+               reassign the opportunity to whoever that first name happens
+               to be. data-orig records what was actually here when the
+               modal opened; saveUpgrade() only sends "am" at all if this
+               value was actually changed, so an edit that's only about
+               the Stage can never silently move ownership. */
+            const orig = canonAM(r ? r['AM'] : myAM);
+            const known = assignableAmList().includes(orig);
+            const opts = known ? assignableAmList() : [orig, ...assignableAmList()];
+            return `<select id="u-am" data-orig="${esc(orig)}">${opts.map(a => `<option${orig === a ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select>`;
+          })()
         /* The Upgrade pipeline now lives in the shared upgrades table, keyed
            to each person's real login name (the server stamps this itself
            on create, see /api/upgrades - it never trusts the client for a
@@ -7452,13 +7467,22 @@ async function saveUpgrade(id) {
     merchant: name,
     storeId: sidTyped || (existing ? existing['Store ID'] : '') || (m ? m['Store ID'] : ''),
     phone: document.getElementById('u-phone').value.trim(),
-    am: document.getElementById('u-am').value,
     planFrom: document.getElementById('u-from').value,
     planTo: document.getElementById('u-to').value,
     stage,
     reason: document.getElementById('u-reason').value,
     notes: document.getElementById('u-notes').value.trim(),
   };
+  /* Only send "am" when it was actually changed by hand, or this is a brand
+     new row (where it has to be sent at all, since there's no existing
+     owner to leave alone). The Owner <select> can end up pre-selected on
+     its first option rather than the row's real current owner when that
+     owner's canonAM() doesn't cleanly match a known option (see data-orig
+     on the select) - sending "am" unconditionally would silently move the
+     opportunity to whoever that first option happens to be, every single
+     time someone only meant to change the Stage. */
+  const amEl = document.getElementById('u-am');
+  if (amEl && (!id || amEl.value !== amEl.dataset.orig)) payload.am = amEl.value;
   if (UP_CLOSED_LOGGED.includes(stage)) {
     payload.closingDate = document.getElementById('u-date').value || todayKey();
     payload.value = Number(document.getElementById('u-val').value) || 0;

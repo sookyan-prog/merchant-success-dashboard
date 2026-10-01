@@ -4057,10 +4057,10 @@ function getData(k) {
    - a failed sync just means this browser's edit didn't reach the shared
    copy this time, not a blocking error in the UI. */
 function syncCampaignActivities(rows) {
-  fetch('/api/campaign-activities', {
+  return fetch('/api/campaign-activities', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rows }),
-  }).catch(() => {});
+  });
 }
 function syncCampaignContacts(data) {
   fetch('/api/campaign-contacts', {
@@ -4083,7 +4083,7 @@ function syncNotifications(rows) {
 function setData(k, a) {
   if (k === 'upgrades') { LIVE_UPGRADES = a; return; }
   if (k === 'timeoff') { LIVE_TIMEOFF = a; return; }
-  if (k === 'campaignActivities') { LIVE_CAMPAIGN_ACTIVITIES = a; syncCampaignActivities(a); return; }
+  if (k === 'campaignActivities') { LIVE_CAMPAIGN_ACTIVITIES = a; syncCampaignActivities(a).catch(() => {}); return; }
   if (k === 'campaignContacts') { LIVE_CAMPAIGN_CONTACTS = a; syncCampaignContacts(a); return; }
   if (k === 'escalations') { LIVE_ESCALATIONS = a; syncEscalations(a); return; }
   if (k === 'notifications') { LIVE_NOTIFICATIONS = a; syncNotifications(a); return; }
@@ -10440,7 +10440,7 @@ function addLeave(dk, wfh, editId) {
     <div style="display:flex;gap:10px;justify-content:flex-end">
       ${existing ? `<button class="btn btn-ghost" style="color:var(--pink);margin-right:auto" onclick="delLeave('${existing['ID']}');closeModal()">Delete</button>` : ''}
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-green" onclick="saveLeave()">${existing ? 'Save changes' : 'Book it'}</button></div>`);
+      <button class="btn btn-green" id="lv-save-btn" onclick="saveLeave()">${existing ? 'Save changes' : 'Book it'}</button></div>`);
   lvCoverList();
   lvTypeSync();
   lvSync();
@@ -10548,7 +10548,19 @@ function lvSync() {
     ${fu.length ? `<br><span style="color:var(--amber)">${fu.length} follow-up${fu.length === 1 ? '' : 's'} due in the window.</span>` : ''}
     <br>${q} merchant${q === 1 ? '' : 's'} in the churn queue will pause rather than move to anyone else.</div>`;
 }
+/* Guards against the double-click/double-submit case: nothing on the Book
+   time off button said "saving" before, so a slow connection looked like
+   nothing happened and clicking again queued a second POST, creating a
+   duplicate row. Now the button goes into a disabled "Saving…" state the
+   moment the request starts and only comes back (or the modal closes) once
+   the round trip finishes, same pattern as refreshLiveData()'s _refreshBusy. */
+let _lvSaving = false;
+function lvResetSaveBtn(btn, label) {
+  _lvSaving = false;
+  if (btn) { btn.textContent = label; btn.disabled = false; }
+}
 async function saveLeave() {
+  if (_lvSaving) return;
   const from = document.getElementById('lv-from').value;
   const typeSelVal = document.getElementById('lv-type').value;
   const isWfh = typeSelVal === WFH_TYPE;
@@ -10563,6 +10575,11 @@ async function saveLeave() {
      not a rule. */
   const who = isManager() ? document.getElementById('lv-who').value : canonAM(myAM);
 
+  const saveBtn = document.getElementById('lv-save-btn');
+  const saveBtnLabel = saveBtn ? saveBtn.textContent : '';
+  _lvSaving = true;
+  if (saveBtn) { saveBtn.textContent = 'Saving…'; saveBtn.disabled = true; }
+
   if (isWfh) {
     const wk = bhcWeekOf(from);
     const clashes = leaveRows().filter(r => canonAM(r['Person']) === canonAM(who) && r['Type'] === WFH_TYPE && bhcWeekOf(r['From']) === wk && r['ID'] !== lvEditId)
@@ -10572,7 +10589,7 @@ async function saveLeave() {
          earliest booking(s) to make room, same idea as before but against
          WFH_WEEKLY_LIMIT instead of always just one. */
       const toDrop = clashes.slice(0, clashes.length - WFH_WEEKLY_LIMIT + 1);
-      if (!confirm(who + ' already has ' + WFH_WEEKLY_LIMIT + ' work-from-home days this week (' + toDrop.map(c => c['From']).join(', ') + '). Replace with ' + from + '?')) return;
+      if (!confirm(who + ' already has ' + WFH_WEEKLY_LIMIT + ' work-from-home days this week (' + toDrop.map(c => c['From']).join(', ') + '). Replace with ' + from + '?')) { lvResetSaveBtn(saveBtn, saveBtnLabel); return; }
       for (const c of toDrop) {
         try { await fetch('/api/time-off/' + c['ID'], { method: 'DELETE' }); } catch (e) {}
       }
@@ -10598,9 +10615,10 @@ async function saveLeave() {
     data = await res.json().catch(() => ({}));
   } catch (e) {
     alert('Could not save that booking - check your connection and try again.');
+    lvResetSaveBtn(saveBtn, saveBtnLabel);
     return;
   }
-  if (!res.ok) { alert(data.error || 'Could not save that booking.'); return; }
+  if (!res.ok) { alert(data.error || 'Could not save that booking.'); lvResetSaveBtn(saveBtn, saveBtnLabel); return; }
 
   const rec = liveTimeOffRow(data.row);
   const rows = leaveRows();
@@ -10622,6 +10640,7 @@ async function saveLeave() {
      anything, so there is nothing for Slack to announce. Editing an existing
      booking does not re-send a notice either; use Notice to resend by hand. */
   const post = !existing && !isWfh && document.getElementById('lv-slack').checked && slackHook();
+  _lvSaving = false;
   closeModal();
   if (post) {
     slackPost(leaveMessage(rec)).then(async r2 => {
@@ -11678,7 +11697,7 @@ function renderActivity1Body(r) {
     ${msgCard('wa', 1, 'Opening message', 'camp-m-' + r.ID, r.ID, 'Message', r.Message)}
     ${msgCard('br', 2, 'If they reply "50"', 'camp-m2-' + r.ID, r.ID, 'Message2', r.Message2)}
     <div style="display:flex;justify-content:flex-end">
-      <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}')">Remove activity</button>
+      <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}',this)">Remove activity</button>
     </div>`;
 }
 /* Activity 2 is an EDM blast Sook Yan sends herself - account managers do
@@ -11761,7 +11780,7 @@ function renderActivity2Body(r) {
           <button class="btn btn-sm btn-navy" onclick="previewCampaignEmail('${r.ID}')">Preview email</button></div>`
       : ''}
     <div style="display:flex;justify-content:flex-end">
-      <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}')">Remove activity</button>
+      <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}',this)">Remove activity</button>
     </div>`;
 }
 /* Activity 3 is Sook Yan's own content work - no account manager action, no
@@ -11776,7 +11795,7 @@ function renderActivity3Body(r) {
     <div class="form-group"><label>3 USPs</label>
       <textarea id="camp-w-${r.ID}" style="min-height:100px" placeholder="the pillars this content should cover" onchange="editCampaignActivity('${r.ID}','WhatToDo',this.value)">${esc(r.WhatToDo)}</textarea></div>
     <div style="display:flex;justify-content:flex-end">
-      <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}')">Remove activity</button>
+      <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}',this)">Remove activity</button>
     </div>`;
 }
 /* Activity 4 is Kian Ming's webinar series - no due date or status on the
@@ -11816,7 +11835,7 @@ function renderActivity4Body(r) {
         </div>`).join('')}
     </div>
     <div style="display:flex;justify-content:flex-end">
-      <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}')">Remove activity</button>
+      <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}',this)">Remove activity</button>
     </div>`;
 }
 /* Activity 5 is the closing-ticket script, same "send this, then this if
@@ -11839,7 +11858,7 @@ function renderActivity5Body(r) {
     ${msgCard('br', '🇨🇳', '中文', 'camp-m2-cn-' + r.ID, r.ID, 'Message2CN', r.Message2CN)}
     ${msgCard('br', '🇲🇾', 'Bahasa Malaysia', 'camp-m2-my-' + r.ID, r.ID, 'Message2MY', r.Message2MY)}
     <div style="display:flex;justify-content:flex-end">
-      <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}')">Remove activity</button>
+      <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}',this)">Remove activity</button>
     </div>`;
 }
 function renderGenericActivityBody(r, owners) {
@@ -11886,7 +11905,7 @@ function renderGenericActivityBody(r, owners) {
     <div class="form-group"><label>Notes</label>
       <textarea id="camp-n-${r.ID}" placeholder="anything else worth remembering" onchange="editCampaignActivity('${r.ID}','Notes',this.value)">${esc(r.Notes)}</textarea></div>
     <div style="display:flex;justify-content:flex-end">
-      <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}')">Remove activity</button>
+      <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="deleteCampaignActivity('${r.ID}',this)">Remove activity</button>
     </div>`;
 }
 function renderCampaignActivities() {
@@ -12109,9 +12128,26 @@ function campaignFollowupCard(batch, total, amName) {
     ],
   };
 }
-function deleteCampaignActivity(id) {
+/* Used to be setData('campaignActivities', ...) and nothing else - setData
+   does fire the sync POST, but fire-and-forget, so a refresh landing before
+   that request finished (easy to do - there was no "removing" feedback at
+   all, see the button below) cancelled it mid-flight, the server never got
+   the delete, and the next GET on reload brought the row straight back.
+   This now awaits the same sync call before touching local state, and shows
+   that it's working so there's no reason to click twice or refresh early. */
+async function deleteCampaignActivity(id, btn) {
   if (!confirm('Remove this activity?')) return;
-  setData('campaignActivities', campaignActivities().filter(x => x.ID !== id));
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = 'Removing…'; btn.disabled = true; }
+  const rows = campaignActivities().filter(x => x.ID !== id);
+  try {
+    await syncCampaignActivities(rows);
+  } catch (e) {
+    if (btn) { btn.textContent = label; btn.disabled = false; }
+    alert('Could not remove that activity - check your connection and try again.');
+    return;
+  }
+  LIVE_CAMPAIGN_ACTIVITIES = rows;
   renderCampaignActivities();
   updateBadges();
 }

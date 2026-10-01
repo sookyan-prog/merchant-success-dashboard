@@ -10103,6 +10103,11 @@ const LEAVE_TYPES = ['Annual leave', 'Half day leave', 'Emergency leave', 'Child
 const HALF_DAY_BASE = 'Half day leave';
 const HALF_DAY_TYPES = ['Half day leave (AM)', 'Half day leave (PM)'];
 const WFH_TYPE = 'Work from home';
+/* Bumped from 1 to 2 starting October 2026 - the reward for the team
+   hitting RM600,000 in September. See saveLeave()/lvSync() below: once
+   someone already has this many WFH rows in the week, saving one more
+   replaces the earliest instead of just adding a third. */
+const WFH_WEEKLY_LIMIT = 2;
 const SLACK_CHANNEL = '#my-team-merchant-sucess';
 const SLACK_CHANNEL_URL = 'https://easystore.slack.com/archives/C0A37UC9BME';
 /* The automatic "away in 2 days" reminder (see migrations/010 and
@@ -10426,7 +10431,7 @@ function addLeave(dk, wfh, editId) {
         <button class="btn btn-xs btn-navy" type="button" onclick="lvAddCover()">Add</button>
       </div>
       <p style="font-size:11.5px;color:var(--muted);margin:6px 0 0;line-height:1.5">Names and the channel each one covers, so merchants get pointed at the right person. No work moves across.</p></div>
-    <p id="lv-wfh-note" class="ms" style="display:none;margin:-4px 0 12px">One work-from-home day a week. Still a normal working day - nothing pauses, nobody covers.</p>
+    <p id="lv-wfh-note" class="ms" style="display:none;margin:-4px 0 12px">Two work-from-home days a week. Still a normal working day - nothing pauses, nobody covers.</p>
     <div id="lv-note-group" class="form-group"><label>Anything the team should know</label><input id="lv-note" placeholder="e.g. contactable on WhatsApp for anything urgent" value="${existing ? esc(existing['Note']) : ''}"></div>
     <div id="lv-clash"></div>
     <div id="lv-slack-group" class="form-group"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--body)">
@@ -10526,9 +10531,9 @@ function lvSync() {
   const who = document.getElementById('lv-who').value;
   if (isWfh) {
     const wk = bhcWeekOf(from);
-    const clash = leaveRows().filter(r => canonAM(r['Person']) === canonAM(who) && r['Type'] === WFH_TYPE && bhcWeekOf(r['From']) === wk && r['ID'] !== lvEditId)[0];
-    el.innerHTML = clash
-      ? `<div class="blocked" style="margin-bottom:12px"><b style="color:var(--pink)">${esc(who)} already has a work-from-home day this week</b>, on ${esc(clash['From'])}. Saving replaces it with ${esc(from)}.</div>`
+    const clashes = leaveRows().filter(r => canonAM(r['Person']) === canonAM(who) && r['Type'] === WFH_TYPE && bhcWeekOf(r['From']) === wk && r['ID'] !== lvEditId);
+    el.innerHTML = clashes.length >= WFH_WEEKLY_LIMIT
+      ? `<div class="blocked" style="margin-bottom:12px"><b style="color:var(--pink)">${esc(who)} already has ${WFH_WEEKLY_LIMIT} work-from-home days this week</b>, on ${clashes.map(c => esc(c['From'])).join(' and ')}. Saving replaces the earliest with ${esc(from)}.</div>`
       : '';
     return;
   }
@@ -10560,13 +10565,18 @@ async function saveLeave() {
 
   if (isWfh) {
     const wk = bhcWeekOf(from);
-    const clashes = leaveRows().filter(r => canonAM(r['Person']) === canonAM(who) && r['Type'] === WFH_TYPE && bhcWeekOf(r['From']) === wk && r['ID'] !== lvEditId);
-    if (clashes.length) {
-      if (!confirm(who + ' already has a work-from-home day this week (' + clashes[0]['From'] + '). Replace it with ' + from + '?')) return;
-      for (const c of clashes) {
+    const clashes = leaveRows().filter(r => canonAM(r['Person']) === canonAM(who) && r['Type'] === WFH_TYPE && bhcWeekOf(r['From']) === wk && r['ID'] !== lvEditId)
+      .sort((a, b) => a['From'] < b['From'] ? -1 : a['From'] > b['From'] ? 1 : 0);
+    if (clashes.length >= WFH_WEEKLY_LIMIT) {
+      /* Already at the cap - saving this one means bumping out the
+         earliest booking(s) to make room, same idea as before but against
+         WFH_WEEKLY_LIMIT instead of always just one. */
+      const toDrop = clashes.slice(0, clashes.length - WFH_WEEKLY_LIMIT + 1);
+      if (!confirm(who + ' already has ' + WFH_WEEKLY_LIMIT + ' work-from-home days this week (' + toDrop.map(c => c['From']).join(', ') + '). Replace with ' + from + '?')) return;
+      for (const c of toDrop) {
         try { await fetch('/api/time-off/' + c['ID'], { method: 'DELETE' }); } catch (e) {}
       }
-      const clashIds = clashes.map(x => x['ID']);
+      const clashIds = toDrop.map(x => x['ID']);
       setData('timeoff', leaveRows().filter(r => !clashIds.includes(r['ID'])));
     }
   }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { db } from '../../../lib/db';
 import { verifySession, SESSION_COOKIE } from '../../../lib/auth';
+import { toUuid } from '../../../lib/ids';
 
 async function requireUser() {
   const token = cookies().get(SESSION_COOKIE)?.value;
@@ -35,7 +36,7 @@ export async function POST(req) {
 
   const body = await req.json().catch(() => ({}));
   const list = Array.isArray(body.rows) ? body.rows : [];
-  const ids = list.map((r) => r && r.ID).filter(Boolean);
+  const ids = list.map((r) => r && r.ID).filter(Boolean).map(toUuid);
 
   /* begin/commit only hold across a single physical connection, not across
      separate pool.query() calls (each of those can be handed a different
@@ -49,7 +50,7 @@ export async function POST(req) {
       await client.query(
         `insert into campaign_activities (id, data, updated_at) values ($1, $2, now())
          on conflict (id) do update set data = excluded.data, updated_at = now()`,
-        [row.ID, JSON.stringify(row)],
+        [toUuid(row.ID), JSON.stringify(row)],
       );
     }
     if (ids.length) {

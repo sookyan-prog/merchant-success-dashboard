@@ -12,11 +12,20 @@ export default function ConsoleDataPage() {
     setError('');
     setMonths(null);
     setLoading(true);
+    /* Without this, a stuck request (a slow-to-wake database, a dropped
+       connection) just left the button saying "Importing..." forever, with
+       nothing to tell the difference between "still working" and "never
+       going to finish" - this gives it a hard stop so it always resolves
+       into a real message instead. 25s is comfortably above a normal Neon
+       cold-start wake-up, not a guess at how long an import "should" take. */
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
     try {
       const res = await fetch('/api/console-retention/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ raw }),
+        signal: controller.signal,
       });
       const data = await res.json();
       if (!res.ok) {
@@ -26,9 +35,15 @@ export default function ConsoleDataPage() {
       }
       setMonths(data.months || []);
       setLoading(false);
-    } catch {
-      setError('Something went wrong. Try again.');
+    } catch (err) {
+      setError(
+        err && err.name === 'AbortError'
+          ? "This took too long and was stopped - the database may be slow to wake up. Wait a few seconds and try again."
+          : 'Something went wrong. Try again.',
+      );
       setLoading(false);
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

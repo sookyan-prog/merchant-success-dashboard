@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { db } from '../../../lib/db';
 import { verifySession, SESSION_COOKIE } from '../../../lib/auth';
+import { postAwayNotice } from '../../../lib/awayNotice';
 
 async function requireUser() {
   const token = cookies().get(SESSION_COOKIE)?.value;
@@ -76,7 +77,24 @@ export async function POST(req) {
         body.slack || null,
       ],
     );
-    return NextResponse.json({ row: shapeRow(rows[0]) }, { status: 201 });
+    const saved = rows[0];
+    /* Emergency leave does not wait for the daily away-notices cron (see
+       app/api/cron/away-notices/route.js) - by the time that runs, someone
+       booking emergency leave could already be gone for the day. Posting
+       here, right as the booking lands, means #my-team-retentionandgrowth
+       hears about it immediately instead of up to 24 hours late. Stamping
+       away_notice_sent_at on success stops the cron from posting it again;
+       leaving it null on failure means the cron still catches it as a
+       backstop, same as any other booking. */
+    let awayNotice = null;
+    if (type === 'Emergency leave') {
+      const ok = await postAwayNotice(saved);
+      awayNotice = ok ? 'sent' : 'failed';
+      if (ok) {
+        await db().query('update time_off set away_notice_sent_at = now() where id = $1', [saved.id]);
+      }
+    }
+    return NextResponse.json({ row: shapeRow(saved), awayNotice }, { status: 201 });
   } catch (err) {
     /* A double-click, or a resubmit after the first request's response never
        made it back, used to leave two identical Work from home rows for the

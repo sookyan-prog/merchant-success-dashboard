@@ -1,16 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '../../../../lib/db';
-const SLACK_IDS = {
-  'Astrid Chen': 'U7SH3D63T',
-  'Astrid': 'U7SH3D63T',
-  'Calvin Choo': 'U016MLMPRBR',
-  'Choo Zhe Hong': 'U016MLMPRBR',
-  'Kian Ming': 'U0956ME2E87',
-  'George Sim': 'U0956ME2E87',
-  'Amira Liyana': 'U0AHEATUYBH',
-  'Cavan Koh': 'U075A84KDJB',
-  'Tan Ye': 'U029T4Y0S7M',
-};
+import { postAwayNotice } from '../../../../lib/awayNotice';
+
 /* This is deliberately NOT under /api/time-off/ (which middleware.js
    requires a signed-in session for) - a scheduled job has no browser and
    no session cookie, so it lives on its own path with its own check
@@ -18,12 +9,20 @@ const SLACK_IDS = {
    same reason.
 
    What this does: once a day, find every non-Work-from-home booking that
-   starts within the next 2 days and hasn't been announced yet, post a
+   starts within the next 3 days and hasn't been announced yet, post a
    short "heads up, X is away soon" message to the team's Slack channel,
-   then mark it sent so it never posts twice. "Within 2 days" rather than
-   "exactly 2 days" on purpose - Emergency leave in particular is often
-   booked with a day's notice or less, and a strict "exactly 2 days
-   before" check would silently never catch a booking like that.
+   then mark it sent so it never posts twice. "Within 3 days" rather than
+   "exactly 3 days" on purpose - leave is often booked with only a day or
+   two's notice, and a strict "exactly 3 days before" check would silently
+   never catch a booking like that.
+
+   Emergency leave does not wait for this at all - see
+   app/api/time-off/route.js, which posts (and stamps away_notice_sent_at)
+   the moment the booking is saved, since emergency leave is often same-day
+   and 3 days is already too slow for it. This cron is still the backstop
+   for it too: if that immediate send fails for any reason,
+   away_notice_sent_at stays null and this picks it up on the next run like
+   anything else.
 
    Two things have to exist in Vercel's Project Settings -> Environment
    Variables for this to do anything:
@@ -37,9 +36,8 @@ const SLACK_IDS = {
 function checkSecret(req) {
   const want = process.env.CRON_SECRET;
   if (!want) return false;
-    const got = req.headers.get('x-cron-secret');
-  const auth = req.headers.get('authorization');
-  return got === want || auth === `Bearer ${want}`;
+  const got = req.headers.get('x-cron-secret');
+  return got === want;
 }
 
 /* Malaysia is UTC+8 with no daylight saving, so this is a fixed offset,
@@ -56,28 +54,8 @@ function addDays(dateKey, n) {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
-function dLong(dateKey) {
-  const d = new Date(dateKey + 'T00:00:00Z');
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-}
-function coverLabel(covers) {
-  if (!Array.isArray(covers) || !covers.length) return '';
-  return covers.map(c => {
-    const id = SLACK_IDS[c.Person];
-    const who = id ? `<@${id}>` : c.Person;
-    return c.Channel ? `${who} (${c.Channel})` : who;
-  }).join(', ');
-}
-function awayMessage(row) {
-  const from = dLong(row.from_date), to = dLong(row.to_date);
-  const when = row.from_date === row.to_date ? `on ${from}` : `from ${from} to ${to}`;
-  const cover = coverLabel(row.covers);
-  return [
-    `*Heads up: ${row.person} will be away ${when}* · ${row.type}`,
-    cover ? `Backup buddy: ${cover}. Please be ready to cover for ${row.person}.` : `No cover named yet, worth checking with ${row.person}.`,
-    row.note ? `_${row.note}_` : null,
-  ].filter(Boolean).join('\n');
-}
+
+const NOTICE_WINDOW_DAYS = 3;
 
 async function run(req) {
   if (!checkSecret(req)) {
@@ -85,16 +63,7 @@ async function run(req) {
   }
 
   const today = myTodayKey();
-const dow = new Date(today + 'T00:00:00Z').getUTCDay(); // 0 Sun, 6 Sat
-
-if (dow === 0 || dow === 6) {
-  return NextResponse.json({ checked: 0, sent: 0, failed: 0, note: 'Weekend, skipped.' });
-}
-
-// Mon to Thu: look 3 days ahead. Friday: look 5 days ahead, because
-// leave starting Sat, Sun, Mon, Tue or Wed has its 3 day mark on a
-// weekend, so it gets announced today (earlier, never later).
-const cutoff = addDays(today, dow === 5 ? 5 : 3);
+  const cutoff = addDays(today, NOTICE_WINDOW_DAYS);
   const { rows } = await db().query(
     `select id, person, type, from_date, to_date, covers, note
        from time_off
@@ -112,19 +81,11 @@ const cutoff = addDays(today, dow === 5 ? 5 : 3);
 
   for (const row of rows) {
     if (!webhook) continue; // leave away_notice_sent_at null - nothing to mark sent, nothing lost
-    try {
-      const res = await fetch(webhook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: awayMessage(row) }),
-      });
-      if (res.ok) {
-        await db().query('update time_off set away_notice_sent_at = now() where id = $1', [row.id]);
-        sent++;
-      } else {
-        failed++;
-      }
-    } catch (e) {
+    const ok = await postAwayNotice(row);
+    if (ok) {
+      await db().query('update time_off set away_notice_sent_at = now() where id = $1', [row.id]);
+      sent++;
+    } else {
       failed++;
     }
   }

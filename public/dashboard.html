@@ -4093,7 +4093,14 @@ function setData(k, a) {
   } catch (e) {}
 }
 function uuid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+  /* A real RFC 4122 v4 UUID: the shared tables key rows by a uuid column, and
+     the old timestamp+random string was rejected by Postgres, silently
+     losing the save. */
+  try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+  });
 }
 /* Local calendar date, never the UTC one. toISOString() rolls over at UTC
  midnight, which is 8am in Malaysia. Midnight-local dates were resolving to
@@ -10627,6 +10634,12 @@ async function saveLeave() {
   setData('timeoff', rows);
   lvEditId = null;
 
+  /* Emergency leave posts to #my-team-retentionandgrowth from the server the
+     moment it is saved - tell her whether that actually happened instead of
+     leaving her to go and check the channel. */
+  if (data.awayNotice === 'sent') showToast('Saved. Away notice posted to Slack.');
+  else if (data.awayNotice === 'failed') setTimeout(() => alert('Saved, but the Slack away notice did not post. Check that SLACK_AWAY_WEBHOOK_URL is set in Vercel (then redeploy) and see the Vercel logs for "[away-notice]".'), 50);
+
   /* Each cover finds out from here now, not by happening to open Time off
      themselves - and only the ones newly added, so re-saving the same
      booking doesn't ping everyone on it again. */
@@ -11509,72 +11522,52 @@ function mergeWebinars(seedArr, oldArr) {
     return { Date: s.Date, Topic: s.Topic, Syllabus: s.Syllabus || '', Held: match ? !!match.Held : false, RegLink: match ? (match.RegLink || '') : '' };
   });
 }
-/* Bump whenever CAMPAIGN_ACTIVITY_SEED's content changes materially (copy,
-   fields), so a browser that already seeded activities from an older build
-   picks up the fix instead of being stuck with whatever first loaded. Owner,
-   Status, Due and Notes are real progress and are always carried forward;
-   only the content fields get refreshed, and only up to this version. */
-const CAMPAIGN_SEED_VERSION = 7;
+/* This used to re-seed from CAMPAIGN_ACTIVITY_SEED whenever the list was
+   empty, and to "refresh by position" (re-appending any seed activity the
+   list was missing) whenever a browser's own campaignSeedVersion setting was
+   behind. Both ran in every teammate's browser against the shared server
+   list, and every run ended in a full-replace POST - so removing the
+   September activities worked until the next browser that was empty, new,
+   or on an older seed version loaded the page, re-created all five from the
+   seed, and wrote them back over the server copy. That is why removed
+   activities kept coming back, and why it still happened after the delete
+   itself started persisting properly.
+
+   The seed was only ever meant to populate a brand new, empty app. This list
+   is now shared and kept by hand (see the page's own description), so
+   campaignActivities() just reads what is there and never invents rows: an
+   empty list is a legitimate state, shown as "Nothing here". The only
+   write left is dropping RETIRED_ACTIVITY_TITLES.
+
+   Each of the five September activities has its own purpose-built body, and
+   the page used to pick it by position (row 1 got the "follow up expiring
+   merchants" body, row 2 the EDM schedule, and so on) - so once any of them
+   was removed or replaced, whatever ended up in row 1-5 would have rendered
+   September's UI. Kind is the stable identity instead: stamped from the
+   original seed title for rows that already exist, with no write needed. */
+const CAMPAIGN_KINDS = ['a1', 'a2', 'a3', 'a4', 'a5'];
+function campaignKindForTitle(title) {
+  const i = CAMPAIGN_ACTIVITY_SEED.findIndex(t => t.Title === title);
+  return i >= 0 ? CAMPAIGN_KINDS[i] : null;
+}
+function activityKind(r) {
+  return (r && (r.Kind || campaignKindForTitle(r.Title))) || null;
+}
 function campaignActivities() {
   let rows = getData('campaignActivities');
   if (rows.some(r => RETIRED_ACTIVITY_TITLES.includes(r.Title))) {
     rows = rows.filter(r => !RETIRED_ACTIVITY_TITLES.includes(r.Title));
     setData('campaignActivities', rows);
   }
-  const s = getSettings();
-  if (!rows.length) {
-    rows = CAMPAIGN_ACTIVITY_SEED.map(t => ({
-      ID: uuid(), Title: t.Title, Owner: t.Owner || 'Team', Status: 'not_started', Due: '',
-      WhatToDo: t.WhatToDo, Message: t.Message || '', Message2: t.Message2 || '',
-      MessageEN: t.MessageEN || '', MessageCN: t.MessageCN || '', MessageMY: t.MessageMY || '',
-      Message2EN: t.Message2EN || '', Message2CN: t.Message2CN || '', Message2MY: t.Message2MY || '',
-      Notes: '', Schedule: t.Schedule || '', EmailSubject: t.EmailSubject || '', EmailBody: t.EmailBody || '',
-      ScheduleSent: {}, ScheduleNotified: {}, Webinars: mergeWebinars(t.Webinars, null),
-    }));
-    setData('campaignActivities', rows);
-    s.campaignSeedVersion = CAMPAIGN_SEED_VERSION;
-    saveSettings(s);
-  } else if ((s.campaignSeedVersion || 0) < CAMPAIGN_SEED_VERSION) {
-    const refreshFields = (r, t) => ({
-      ...r, Title: t.Title, WhatToDo: t.WhatToDo, Message: t.Message || '', Message2: t.Message2 || '',
-      MessageEN: t.MessageEN || '', MessageCN: t.MessageCN || '', MessageMY: t.MessageMY || '',
-      Message2EN: t.Message2EN || '', Message2CN: t.Message2CN || '', Message2MY: t.Message2MY || '',
-      Schedule: t.Schedule || '', EmailSubject: t.EmailSubject || '', EmailBody: t.EmailBody || '',
-      ScheduleSent: r.ScheduleSent || {}, ScheduleNotified: r.ScheduleNotified || {},
-      Webinars: mergeWebinars(t.Webinars, r.Webinars),
-    });
-    if (rows.length <= CAMPAIGN_ACTIVITY_SEED.length) {
-      /* Refresh whatever already lines up by position, then add any new
-         activities the seed has grown by since this browser last seeded -
-         new activities are always appended at the end, so this covers both
-         an unchanged team (same length) and a browser that's behind by one
-         or more campaign activities (fewer rows than the current seed). */
-      rows = rows.map((r, i) => (CAMPAIGN_ACTIVITY_SEED[i] ? refreshFields(r, CAMPAIGN_ACTIVITY_SEED[i]) : r));
-      for (let i = rows.length; i < CAMPAIGN_ACTIVITY_SEED.length; i++) {
-        const t = CAMPAIGN_ACTIVITY_SEED[i];
-        rows.push({
-          ID: uuid(), Title: t.Title, Owner: t.Owner || 'Team', Status: 'not_started', Due: '',
-          WhatToDo: t.WhatToDo, Message: t.Message || '', Message2: t.Message2 || '',
-          MessageEN: t.MessageEN || '', MessageCN: t.MessageCN || '', MessageMY: t.MessageMY || '',
-          Message2EN: t.Message2EN || '', Message2CN: t.Message2CN || '', Message2MY: t.Message2MY || '',
-          Notes: '', Schedule: t.Schedule || '', EmailSubject: t.EmailSubject || '', EmailBody: t.EmailBody || '',
-          ScheduleSent: {}, ScheduleNotified: {}, Webinars: mergeWebinars(t.Webinars, null),
-        });
-      }
-    } else {
-      /* activities were added or removed by hand - too different to safely
-         match up to the seed, so just make sure the newer fields exist. */
-      rows.forEach(r => {
-        ['Schedule', 'EmailSubject', 'EmailBody', 'Message2', 'MessageEN', 'MessageCN', 'MessageMY', 'Message2EN', 'Message2CN', 'Message2MY'].forEach(f => { if (r[f] == null) r[f] = ''; });
-        if (r.ScheduleSent == null) r.ScheduleSent = {};
-        if (r.ScheduleNotified == null) r.ScheduleNotified = {};
-        if (r.Webinars == null) r.Webinars = [];
-      });
-    }
-    setData('campaignActivities', rows);
-    s.campaignSeedVersion = CAMPAIGN_SEED_VERSION;
-    saveSettings(s);
-  }
+  /* In memory only, never written back by itself: any later edit saves the
+     whole row anyway, Kind and fields included. */
+  rows.forEach(r => {
+    if (!r.Kind) { const k = campaignKindForTitle(r.Title); if (k) r.Kind = k; }
+    ['Schedule', 'EmailSubject', 'EmailBody', 'Message2', 'MessageEN', 'MessageCN', 'MessageMY', 'Message2EN', 'Message2CN', 'Message2MY'].forEach(f => { if (r[f] == null) r[f] = ''; });
+    if (r.ScheduleSent == null) r.ScheduleSent = {};
+    if (r.ScheduleNotified == null) r.ScheduleNotified = {};
+    if (r.Webinars == null) r.Webinars = [];
+  });
   return rows;
 }
 
@@ -11739,7 +11732,7 @@ function previewCampaignEmail(id) {
    day, rather than only firing on that one date. */
 function ensureCampaignEdmReminders() {
   const rows = campaignActivities();
-  const r = rows[1];
+  const r = rows.find(x => activityKind(x) === 'a2');
   if (!r) return;
   const dates = scheduleDates(r);
   if (!dates.length) return;
@@ -11923,11 +11916,12 @@ function renderCampaignActivities() {
     </div>
     ${rows.length === 0 ? `<div class="section"><div class="empty"><div class="big">Nothing here</div><p>Add the first activity for this period.</p></div></div>` : ''}
     ${rows.map((r, i) => {
-      const isActivity1 = i === 0;
-      const isActivity2 = i === 1;
-      const isActivity3 = i === 2;
-      const isActivity4 = i === 3;
-      const isActivity5 = i === 4;
+      const kind = activityKind(r);
+      const isActivity1 = kind === 'a1';
+      const isActivity2 = kind === 'a2';
+      const isActivity3 = kind === 'a3';
+      const isActivity4 = kind === 'a4';
+      const isActivity5 = kind === 'a5';
       const noStatus = isActivity1 || isActivity2 || isActivity3 || isActivity4 || isActivity5;
       const statusInfo = CAMPAIGN_STATUS.find(s => s[0] === r.Status) || CAMPAIGN_STATUS[0];
       const col = CAMP_COLORS[i % CAMP_COLORS.length];
@@ -12037,7 +12031,7 @@ function campaignBatchForDay(name, dk) {
   return { batch, total: cq.length };
 }
 function campaignMsgFor(merchantName, amName) {
-  const a1 = campaignActivities()[0];
+  const a1 = campaignActivities().find(x => activityKind(x) === 'a1');
   const tmpl = (a1 && a1.Message) || '';
   return tmpl
     .replace(/\[Merchant Name\]/g, merchantName)
@@ -12867,10 +12861,12 @@ function renderSettings() {
  <p style="font-size:11.5px;color:var(--muted);margin-top:9px">The browser will not let this page read Slack's reply, so a test can confirm the request left but not that it arrived. Check the channel.</p></div>
 
  <div class="setup-step" style="border-left-color:var(--indigo)"><h3>Automatic away reminder</h3>
- <p>Separately from the handover notice above, the app now posts a short reminder to <b>${AWAY_SLACK_CHANNEL}</b> on its own, about 2 days before anyone's booked leave starts - Annual leave, Half day leave, Emergency leave, Childcare leave, and Unpaid leave. Work from home is left out, since it is not an absence.</p>
+ <p>Separately from the handover notice above, the app now posts a short reminder to <b>${AWAY_SLACK_CHANNEL}</b> on its own, about 3 days before anyone's booked leave starts - Annual leave, Half day leave, Emergency leave, Childcare leave, and Unpaid leave. Work from home is left out, since it is not an absence.</p>
+ <p><b>Emergency leave does not wait the 3 days</b> - it posts the moment it's booked, since emergency leave is often for that same day. The 3-day job is still there as a backstop for it too, in case the immediate post ever fails to go out.</p>
+ <p>Anyone named as cover is tagged (<code>@name</code>) in the message, not just mentioned by name, so it actually lands in their Slack notifications. That needs each person's Slack member ID filled in once in <code>lib/awayNotice.js</code> - left blank, a cover still shows by name, just without the ping.</p>
  <p>This one runs on a schedule with no browser open, so unlike the webhook above it cannot live in this file - it needs two values set as <b>Environment Variables</b> in the Vercel project (Project → Settings → Environment Variables), then a redeploy:</p>
  <p style="font-family:monospace;font-size:12px;background:var(--bg);border-radius:8px;padding:10px 12px;line-height:1.8">SLACK_AWAY_WEBHOOK_URL <span style="color:var(--muted)">— a new incoming webhook for ${AWAY_SLACK_CHANNEL}, created at api.slack.com the same way as the one above</span><br>CRON_SECRET <span style="color:var(--muted)">— a random string so only the scheduled job can trigger it</span></p>
- <p style="font-size:11.5px;color:var(--muted);margin-top:9px">Until both are set, nothing posts and nothing is lost - bookings just wait until the variables exist, then get picked up on the next daily run.</p></div>
+ <p style="font-size:11.5px;color:var(--muted);margin-top:9px">Until both are set, nothing posts and nothing is lost - bookings just wait until the variables exist, then get picked up on the next daily run (or, for Emergency leave, the next time one is booked after the variables are set).</p></div>
 
  <div class="setup-step"><h3>Crisp BCC</h3>
  <p>Every email draft blind-copies this address so the thread lands in Crisp. This works today. It needs no API at all.</p>
@@ -14495,7 +14491,7 @@ document.addEventListener('visibilitychange', function () {
   backfillRiskOwners();
   ensureBhcSeeded();
   migrateIncSettings();
-  campaignActivities(); /* seeds/migrates before the reminder check reads it */
+  campaignActivities(); /* normalises fields before the reminder check reads it */
   ensureCampaignEdmReminders();
   churnMonth = churnMonths()[0] || null;
   curDay = today();

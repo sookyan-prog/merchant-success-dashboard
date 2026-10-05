@@ -1,6 +1,16 @@
 import { NextResponse } from 'next/server';
 import { db } from '../../../../lib/db';
-
+const SLACK_IDS = {
+  'Astrid Chen': 'U7SH3D63T',
+  'Astrid': 'U7SH3D63T',
+  'Calvin Choo': 'U016MLMPRBR',
+  'Choo Zhe Hong': 'U016MLMPRBR',
+  'Kian Ming': 'U0956ME2E87',
+  'George Sim': 'U0956ME2E87',
+  'Amira Liyana': 'U0AHEATUYBH',
+  'Cavan Koh': 'U075A84KDJB',
+  'Tan Ye': 'U029T4Y0S7M',
+};
 /* This is deliberately NOT under /api/time-off/ (which middleware.js
    requires a signed-in session for) - a scheduled job has no browser and
    no session cookie, so it lives on its own path with its own check

@@ -73,7 +73,7 @@ function awayMessage(row) {
   const cover = coverLabel(row.covers);
   return [
     `*Heads up: ${row.person} will be away ${when}* · ${row.type}`,
-    cover ? `Covering: *${cover}*` : `No cover named yet - worth checking with ${row.person}.`,
+    cover ? `Backup buddy: ${cover}. Please be ready to cover for ${row.person}.` : `No cover named yet, worth checking with ${row.person}.`,
     row.note ? `_${row.note}_` : null,
   ].filter(Boolean).join('\n');
 }

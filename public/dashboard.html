@@ -10324,7 +10324,6 @@ function renderTimeOff() {
       <div class="card"><div class="card-num">${wfhNow.length}</div><div class="card-label">Working from home today</div><div class="card-sub">still on the clock</div></div>
       <div class="card"><div class="card-num">${upcoming.length}</div><div class="card-label">Upcoming bookings</div><div class="card-sub">not started yet</div></div>
       <div class="card"><div class="card-num">${all.filter(r => monthKey(r['From']) === monthKey(today)).reduce((a, r) => a + workingDays(r['From'], r['To'], r['Type']), 0)}</div><div class="card-label">Working days off</div><div class="card-sub">booked in ${monthLabel(monthKey(today))}</div></div>
-      <div class="card ${slackHook() ? 'card-green' : 'card-grey'}"><div class="card-num">${slackHook() ? 'on' : 'off'}</div><div class="card-label">Slack notice</div><div class="card-sub">${slackHook() ? SLACK_CHANNEL : 'add a webhook in Settings'}</div></div>
     </div>
 
     <div class="cx-filters">
@@ -10441,9 +10440,7 @@ function addLeave(dk, wfh, editId) {
     <p id="lv-wfh-note" class="ms" style="display:none;margin:-4px 0 12px">Two work-from-home days a week. Still a normal working day - nothing pauses, nobody covers.</p>
     <div id="lv-note-group" class="form-group"><label>Anything the team should know</label><input id="lv-note" placeholder="e.g. contactable on WhatsApp for anything urgent" value="${existing ? esc(existing['Note']) : ''}"></div>
     <div id="lv-clash"></div>
-    <div id="lv-slack-group" class="form-group"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--body)">
-      <input type="checkbox" id="lv-slack" ${slackHook() ? 'checked' : 'disabled'}>
-      Post the handover notice to ${SLACK_CHANNEL}${slackHook() ? '' : ' (add a webhook in Settings first)'}</label></div>
+
     <div style="display:flex;gap:10px;justify-content:flex-end">
       ${existing ? `<button class="btn btn-ghost" style="color:var(--pink);margin-right:auto" onclick="delLeave('${existing['ID']}');closeModal()">Delete</button>` : ''}
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -10464,7 +10461,7 @@ function lvTypeSync() {
   const toGroup = document.getElementById('lv-to-group');
   const coverGroup = document.getElementById('lv-cover-group');
   const noteGroup = document.getElementById('lv-note-group');
-  const slackGroup = document.getElementById('lv-slack-group');
+  
   const note = document.getElementById('lv-wfh-note');
   const halfGroup = document.getElementById('lv-half-group');
   /* Work from home and a half day are both a single day, not a range - the
@@ -10478,7 +10475,6 @@ function lvTypeSync() {
      nor the Slack notice applies - only actual absence does. A half day is
      still a real absence for half the day, so it keeps both. */
   if (noteGroup) noteGroup.style.display = isWfh ? 'none' : '';
-  if (slackGroup) slackGroup.style.display = isWfh ? 'none' : '';
   if (note) note.style.display = isWfh ? 'block' : 'none';
 }
 /* Cover is anyone except the person going away, which is the one name that
@@ -10652,7 +10648,7 @@ async function saveLeave() {
   /* No handover to send for a work-from-home day - it does not pause
      anything, so there is nothing for Slack to announce. Editing an existing
      booking does not re-send a notice either; use Notice to resend by hand. */
-  const post = !existing && !isWfh && document.getElementById('lv-slack').checked && slackHook();
+  const post = false; /* the old browser-side Slack checkbox was removed: the server now posts Emergency leave itself, and the daily cron handles the 3-day reminder */
   _lvSaving = false;
   closeModal();
   if (post) {

@@ -84,7 +84,16 @@ async function run(req) {
   }
 
   const today = myTodayKey();
-  const cutoff = addDays(today, 2);
+const dow = new Date(today + 'T00:00:00Z').getUTCDay(); // 0 Sun, 6 Sat
+
+if (dow === 0 || dow === 6) {
+  return NextResponse.json({ checked: 0, sent: 0, failed: 0, note: 'Weekend, skipped.' });
+}
+
+// Mon to Thu: look 3 days ahead. Friday: look 5 days ahead, because
+// leave starting Sat, Sun, Mon, Tue or Wed has its 3 day mark on a
+// weekend, so it gets announced today (earlier, never later).
+const cutoff = addDays(today, dow === 5 ? 5 : 3);
   const { rows } = await db().query(
     `select id, person, type, from_date, to_date, covers, note
        from time_off

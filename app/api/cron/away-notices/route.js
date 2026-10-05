@@ -61,7 +61,11 @@ function dLong(dateKey) {
 }
 function coverLabel(covers) {
   if (!Array.isArray(covers) || !covers.length) return '';
-  return covers.map(c => (c.Channel ? `${c.Person} (${c.Channel})` : c.Person)).join(', ');
+  return covers.map(c => {
+    const id = SLACK_IDS[c.Person];
+    const who = id ? `<@${id}>` : c.Person;
+    return c.Channel ? `${who} (${c.Channel})` : who;
+  }).join(', ');
 }
 function awayMessage(row) {
   const from = dLong(row.from_date), to = dLong(row.to_date);

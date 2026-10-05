@@ -37,8 +37,9 @@ const SLACK_IDS = {
 function checkSecret(req) {
   const want = process.env.CRON_SECRET;
   if (!want) return false;
-  const got = req.headers.get('x-cron-secret');
-  return got === want;
+    const got = req.headers.get('x-cron-secret');
+  const auth = req.headers.get('authorization');
+  return got === want || auth === `Bearer ${want}`;
 }
 
 /* Malaysia is UTC+8 with no daylight saving, so this is a fixed offset,

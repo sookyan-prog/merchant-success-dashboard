@@ -1038,7 +1038,7 @@ function updateLiveBanner() {
     ? 'Your sign-in has expired, so the shared data cannot load and pages may look empty. <a href="/login" style="color:#6B4A00;font-weight:700">Sign in again</a>'
     : 'Some shared data did not load, so pages may look empty or incomplete. Your data is not lost. <button onclick="refreshLiveData()" style="margin-left:8px;border:1px solid #C9A24A;background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:700;color:#6B4A00">Try again</button>';
 }
-async function fetchLive(url) {
+async function fetchShared(url) {
   let lastErr = null;
   for (let i = 0; i < 3; i++) {
     try {
@@ -1057,7 +1057,7 @@ async function fetchLive(url) {
 }
 async function loadConsoleRetention() {
   try {
-    const res = await fetchLive('/api/console-retention');
+    const res = await fetchShared('/api/console-retention');
     const data = await res.json();
     if (data && Array.isArray(data.rows) && data.rows.length) {
       LIVE_CONSOLE_RETENTION = data.rows;
@@ -4691,7 +4691,7 @@ async function deleteFromRemote(tab, id) {
 let LIVE_CHURN_STORES = null;
 async function loadChurnStores() {
   try {
-    const res = await fetchLive('/api/churn-stores');
+    const res = await fetchShared('/api/churn-stores');
     const data = await res.json();
     if (data && Array.isArray(data.rows) && data.rows.length) LIVE_CHURN_STORES = data.rows;
   } catch (e) {}
@@ -4713,7 +4713,7 @@ function liveUpgradeRow(x) {
 }
 async function loadUpgrades() {
   try {
-    const res = await fetchLive('/api/upgrades');
+    const res = await fetchShared('/api/upgrades');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) LIVE_UPGRADES = data.rows.map(liveUpgradeRow);
   } catch (e) {}
@@ -4730,7 +4730,7 @@ function liveTimeOffRow(x) {
 }
 async function loadTimeOff() {
   try {
-    const res = await fetchLive('/api/time-off');
+    const res = await fetchShared('/api/time-off');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) LIVE_TIMEOFF = data.rows.map(liveTimeOffRow);
   } catch (e) {}
@@ -4742,28 +4742,28 @@ async function loadTimeOff() {
    Upgrades/Time off there's no camelCase-to-PascalCase mapping step here. */
 async function loadCampaignActivities() {
   try {
-    const res = await fetchLive('/api/campaign-activities');
+    const res = await fetchShared('/api/campaign-activities');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) LIVE_CAMPAIGN_ACTIVITIES = data.rows;
   } catch (e) {}
 }
 async function loadCampaignContacts() {
   try {
-    const res = await fetchLive('/api/campaign-contacts');
+    const res = await fetchShared('/api/campaign-contacts');
     const data = await res.json();
     if (data && data.data && typeof data.data === 'object') LIVE_CAMPAIGN_CONTACTS = data.data;
   } catch (e) {}
 }
 async function loadEscalations() {
   try {
-    const res = await fetchLive('/api/escalations');
+    const res = await fetchShared('/api/escalations');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) LIVE_ESCALATIONS = data.rows;
   } catch (e) {}
 }
 async function loadNotifications() {
   try {
-    const res = await fetchLive('/api/notifications');
+    const res = await fetchShared('/api/notifications');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) LIVE_NOTIFICATIONS = data.rows;
   } catch (e) {}
@@ -4774,7 +4774,7 @@ async function loadNotifications() {
    nothing downstream of getProofs()/getRecs() needed to change. */
 async function loadBhc() {
   try {
-    const res = await fetchLive('/api/bhc');
+    const res = await fetchShared('/api/bhc');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) {
       LIVE_BHC = data.rows;
@@ -4815,7 +4815,7 @@ function migrateLocalBhc() {
 }
 async function loadProofs() {
   try {
-    const res = await fetchLive('/api/proofs');
+    const res = await fetchShared('/api/proofs');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) {
       LIVE_PROOFS = {};
@@ -4826,7 +4826,7 @@ async function loadProofs() {
 }
 async function loadRecs() {
   try {
-    const res = await fetchLive('/api/call-recordings');
+    const res = await fetchShared('/api/call-recordings');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) {
       LIVE_RECS = {};

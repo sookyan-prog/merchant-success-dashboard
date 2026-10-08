@@ -3948,6 +3948,7 @@ let LIVE_NOTIFICATIONS = [];
    link, and the note are shared. */
 let LIVE_BHC = [];
 let _bhcSynced = {};
+let _bhcLoaded = false; // true only once the shared list has really been fetched from the server
 let LIVE_PROOFS = {};
 let LIVE_RECS = {};
 /* The last snapshot known to match the server, used by setProofs()/setRecs()
@@ -4778,6 +4779,7 @@ async function loadBhc() {
     const data = await res.json();
     if (data && Array.isArray(data.rows)) {
       LIVE_BHC = data.rows;
+      _bhcLoaded = true;
       _bhcSynced = {};
       LIVE_BHC.forEach(r => { if (r && r.ID) _bhcSynced[r.ID] = JSON.stringify(r); });
     }
@@ -4790,7 +4792,11 @@ async function loadBhc() {
    test and putting it on a teammate's book would be worse than leaving it. */
 function migrateLocalBhc() {
   const s = getSettings();
-  if (s.bhcSharedMigration) return;
+  /* Never migrate (and never hide the browser's own copy) unless the shared list
+     really loaded: with a failed load the "already on the server" check is
+     meaningless and sessions could be filed under nothing. */
+  if (!_bhcLoaded) return;
+  if (s.bhcSharedMigration) { recoverBhcBackup(); return; }
   /* Without knowing who is signed in there is no way to tell which sessions
      are theirs, so do nothing and try again next time rather than marking
      the job done. */
@@ -4811,6 +4817,23 @@ function migrateLocalBhc() {
     localStorage.removeItem('ret2_bhc');
   } catch (e) {}
   s.bhcSharedMigration = 1;
+  saveSettings(s);
+}
+/* One-time rescue. A broken build once marked the move to shared health checks as
+   done without the sessions ever reaching the server, leaving them only in the
+   browser's backup copy. Anyone whose own sessions are in that backup and not on
+   the server gets them pushed up, once. Other people's sessions are never touched. */
+function recoverBhcBackup() {
+  const s = getSettings();
+  if (s.bhcRecovered1 || !_bhcLoaded || !myAM) return;
+  let bak = [];
+  try { bak = JSON.parse(localStorage.getItem('ret2_bhc_before_shared') || '[]'); } catch (e) {}
+  if (!Array.isArray(bak)) bak = [];
+  const have = new Set(LIVE_BHC.map(r => r.ID));
+  const me = canonAM(myAM);
+  const back = bak.filter(r => r && r.ID && !have.has(r.ID) && canonAM(r['AM']) === me);
+  if (back.length) setData('bhc', back.concat(LIVE_BHC));
+  s.bhcRecovered1 = 1;
   saveSettings(s);
 }
 async function loadProofs() {

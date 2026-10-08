@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { db } from '../../../lib/db';
 import { verifySession, SESSION_COOKIE } from '../../../lib/auth';
 import { toUuid } from '../../../lib/ids';
+import { ensureSchema } from '../../../lib/ensureSchema';
 
 async function requireUser() {
   const token = cookies().get(SESSION_COOKIE)?.value;
@@ -19,6 +20,7 @@ export async function GET() {
   const me = await requireUser();
   if (!me) return NextResponse.json({ error: 'Not allowed.' }, { status: 403 });
 
+  await ensureSchema();
   const { rows } = await db().query('select data from notifications order by updated_at asc');
   return NextResponse.json({ rows: rows.map((r) => r.data) });
 }
@@ -31,6 +33,7 @@ export async function POST(req) {
   const list = Array.isArray(body.rows) ? body.rows : [];
   const ids = list.map((r) => r && r.ID).filter(Boolean).map(toUuid);
 
+  await ensureSchema();
   const client = await db().connect();
   try {
     await client.query('begin');

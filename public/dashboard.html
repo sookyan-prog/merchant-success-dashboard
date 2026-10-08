@@ -1036,7 +1036,7 @@ function updateLiveBanner() {
   }
   el.innerHTML = _liveFailed['session']
     ? 'Your sign-in has expired, so the shared data cannot load and pages may look empty. <a href="/login" style="color:#6B4A00;font-weight:700">Sign in again</a>'
-    : 'Some shared data did not load, so pages may look empty or incomplete. Your data is not lost. <button onclick="refreshLiveData()" style="margin-left:8px;border:1px solid #C9A24A;background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:700;color:#6B4A00">Try again</button>';
+    : 'Some shared data did not load (' + names.filter(n => n !== 'session').map(n => esc(n.replace('/api/', ''))).join(', ') + '), so pages may look empty or incomplete. Your data is not lost. <button onclick="refreshLiveData()" style="margin-left:8px;border:1px solid #C9A24A;background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:700;color:#6B4A00">Try again</button>';
 }
 async function fetchShared(url) {
   let lastErr = null;

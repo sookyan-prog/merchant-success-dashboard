@@ -8804,6 +8804,7 @@ function renderReportsOverview() {
   document.getElementById('page-reports-overview').innerHTML =
     reportHead('Overview', 'The three streams at a glance', '',
       'Console · <b>' + CONSOLE_SCOPE + '</b><br><span style="font-size:11px">read ' + consoleSnapshotLabel() + '</span>')
+    + (LIVE_CONSOLE_RETENTION ? '' : `<div class="alert alert-yellow" style="margin-bottom:12px"><b>Showing the old built-in snapshot, not the live retention data.</b> The live numbers did not load, so September and October are missing here. <a href="#" onclick="loadConsoleRetention().then(()=>render());return false">Try again</a>, or hard refresh the page (Cmd+Shift+R).</div>`)
     + `<div class="cx-dates" style="margin:-4px 0 16px">
         ${crMonths().slice(0, 8).map(m => `<button class="cx-date" aria-pressed="${mk === m}" onclick="setChurnMonth('${m}')">
           <b>${monthLabel(m)}</b><span>${rm((cr(m) || {}).retentionGr)} GR</span></button>`).join('')}
@@ -14870,7 +14871,7 @@ async function pollLiveData() {
     await Promise.all([
       loadUpgrades(), loadTimeOff(), loadCampaignActivities(),
       loadCampaignContacts(), loadEscalations(), loadProofs(), loadRecs(),
-      loadNotifications(), loadBhc(),
+      loadNotifications(), loadBhc(), loadConsoleRetention(),
     ]);
     render();
   } catch (e) {}
@@ -14886,7 +14887,7 @@ async function refreshLiveData(btnId) {
     await Promise.all([
       loadUpgrades(), loadTimeOff(), loadCampaignActivities(),
       loadCampaignContacts(), loadEscalations(), loadProofs(), loadRecs(),
-      loadNotifications(), loadBhc(),
+      loadNotifications(), loadBhc(), loadConsoleRetention(),
     ]);
     render();
   } finally {

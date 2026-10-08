@@ -767,36 +767,7 @@ const AUG_DATA=[
 ];
 /* ---- data: T ---- */
 const T={
-cavan:{name:"Cavan Koh",team:"Activation",role:"Onboarding specialist",cls:"",book:"38 onboarding",risk:"4 overdue",riskWarn:true,
- agenda:[
- {t:"09:30",d:"15 min",cls:"gy",tag:["Admin","t-grey"],ttl:"Read the overnight queue",sub:"6 new merchants subscribed yesterday",
-  why:"Before anyone picks up the phone, so the day is planned, not reactive.",
-  rule:"Runs after the 06:00 scoring job",
-  steps:["<b>Confirm the four overdue merchants</b> are still overdue, some finish setup overnight.","<b>Assign the 6 new signups</b> to a welcome batch.","<b>Flag anything you can't get to</b> so it moves to tomorrow rather than silently slipping."]},
- {t:"10:00",d:"20 min",cls:"am",tag:["Onboarding overdue","t-amber"],ttl:"Call BookWorld Malaysia",sub:"#1441938 · day 28 · setup 40%",
-  why:"Retail owner. Mid-morning, before the shop gets busy. Two WhatsApps already went unanswered, so call.",
-  rule:"Past 21 working days since handover and setup below 75%",
-  steps:["<b>Call, don't message.</b> Two follow-ups have gone unanswered already.","<b>Find the single blocker</b>, payment gateway is unconnected. Ask what stopped them.","<b>Book a walkthrough</b>, don't send another guide link. The owner isn't technical."],
-  script:"Hi Sarah, Cavan from EasyStore.\n\nI noticed your setup has been paused at the payment gateway for about two weeks, that's usually the fiddliest part and most people get stuck there.\n\nRather than send another guide, can I do it with you on a 20-minute call? I have Thursday 11am or 3pm."},
- {t:"10:30",d:"20 min",cls:"am",tag:["Onboarding overdue","t-amber"],ttl:"Call AYAM GEPUK BANGSA",sub:"#1440895 · day 24 · no products uploaded",
-  why:"F&B. Call before the lunch rush starts at 11:30, or you won't get them until 3pm.",
-  rule:"Past 21 working days since handover and setup below 75%",
-  steps:["<b>One blocker only:</b> they have product photos but no catalogue file.","<b>Offer to build the first ten products</b> with them on the call.","<b>Set a go-live date</b> on the call, an open-ended setup never finishes."],
-  script:"Hi Firdaus, Cavan from EasyStore.\n\nYour store's ready apart from the products. I know putting the catalogue together is the annoying bit, so let me sit on a call and we'll do the first ten together, after that it's copy-paste.\n\nBefore lunch tomorrow, or after 3pm?"},
- {t:"11:15",d:"30 min",cls:"",tag:["Setup health check","t-blue"],ttl:"Setup health check: Teenature.co",sub:"#1356784 · day 41 · stalled 3 weeks",
-  why:"Deep work slot. Do the check before contacting them so you arrive with findings.",
-  rule:"Day 30 to 60 and setup unchanged for 14 days",
-  steps:["<b>Score the four setup areas</b>. Shipping and payment are both incomplete.","<b>Send the fix list, not the score.</b> Nobody cares about a number out of 100.","<b>Assign an account manager</b> while you're in the record. This one has nobody."],
-  script:"Hi Adam, you've been live about six weeks now.\n\nI ran a check over your store and found two things that are probably costing you orders, shipping rates aren't set, and your payment gateway is only half connected, so some checkouts will be failing.\n\nWant the fix list, or is a quick call easier?"},
- {t:"14:00",d:"40 min",cls:"gr",tag:["Welcome batch","t-green"],ttl:"Welcome the 6 new merchants",sub:"Subscribed Fri to Sun · WhatsApp",
-  why:"Early afternoon gets the highest reply rate on WhatsApp for new signups.",
-  rule:"Subscribed within the last 3 days and not yet contacted",
-  steps:["<b>Personalise the first line</b> with their business, not their store ID.","<b>One ask only:</b> book the onboarding call. Don't send the full guide pack yet.","<b>Log every send</b> so day-21 overdue counts start from a real first contact."]},
- {t:"16:30",d:"20 min",cls:"gy",tag:["Admin","t-grey"],ttl:"Write handover notes",sub:"2 merchants reaching 100% setup",
-  why:"End of day. This is the note the account manager inherits, it's the fix for lost context at handover.",
-  rule:"Setup complete and no handover note written",
-  steps:["<b>What the merchant actually sells</b>, in one line.","<b>What they care about</b>. The thing they mentioned twice.","<b>What's still fragile</b> so the AM doesn't walk into it blind."]}
- ]},
+cavan:{name:"Cavan Koh",inactive:true,team:"Activation",role:"Onboarding specialist",cls:"",book:"0 accounts",risk:"none",riskWarn:false,agenda:[]},
 
 amira:{name:"Amira Liyana",team:"Retention",role:"Retention & growth",cls:"ret",book:"96 accounts",risk:"3 at risk",riskWarn:true,
  agenda:[
@@ -880,7 +851,11 @@ calvin:{name:"Calvin Choo",team:"Retention",role:"Renewals & win-back",cls:"ret"
   why:"Do the digging before the call. Turning up without knowing when the store went quiet wastes the conversation.",
   rule:"Tier A diagnostic prep, calls scheduled 5 August",
   steps:["<b>Find the month the orders stopped.</b> That date is the whole conversation.","<b>Check whether they still log in</b>, a dormant store with an active login is a different problem.","<b>Freshdayone (SG) needs an SGD figure from finance</b> before its call."]}
- ]}
+ ]},
+/* Joined October 2026. No hand-written sample agenda: My day is built live from
+   her own queue, like everyone else's. */
+tanye:{name:"Tan Ye",team:"Retention",role:"Merchant success advisor",cls:"ret",book:"0 accounts",risk:"none yet",riskWarn:false,
+ agenda:[]}
 };
 /* ---- data: DATES ---- */
 const DATES=[
@@ -892,7 +867,7 @@ const DATES=[
 ];
 /* ---- data: OWNER ---- */
 const OWNER={cavan:"Cavan Koh",amira:"Amira Liyana",astrid:"Astrid Chen",
-             calvin:"Calvin Choo",george:"George Sim"};
+             calvin:"Calvin Choo",george:"George Sim",tanye:"Tan Ye"};
 /* ---- data: TIER_E ---- */
 const TIER_E={n:50,val:51234,dormant:"Living Active Wellness Shop (#125990)"};
 /* ---- data: SLOTS ---- */
@@ -1042,9 +1017,46 @@ const CONSOLE_URL = 'https://console.easystore.pink/reports/retention?period=mon
    before the DB has anything, etc.) so the page never shows nothing. */
 let LIVE_CONSOLE_RETENTION = null;
 let LIVE_CONSOLE_UPDATED_AT = null;
+/* Every shared list loads through this. Before, a hiccup (the database waking
+   up, a dropped connection, an expired sign-in) was swallowed silently and the
+   page simply rendered empty - "Nothing here", RM 0 - which looks exactly like
+   the data being gone. Now a failed load is retried, and if it still fails
+   the page says so instead of pretending the data does not exist. */
+const _liveFailed = {};
+function updateLiveBanner() {
+  let el = document.getElementById('live-banner');
+  const names = Object.keys(_liveFailed);
+  if (!names.length) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'live-banner';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#FFF4D6;border-bottom:1px solid #F0D58A;color:#6B4A00;font-size:13px;padding:9px 16px;text-align:center;line-height:1.5';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = _liveFailed['session']
+    ? 'Your sign-in has expired, so the shared data cannot load and pages may look empty. <a href="/login" style="color:#6B4A00;font-weight:700">Sign in again</a>'
+    : 'Some shared data did not load, so pages may look empty or incomplete. Your data is not lost. <button onclick="refreshLiveData()" style="margin-left:8px;border:1px solid #C9A24A;background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:700;color:#6B4A00">Try again</button>';
+}
+async function fetchLive(url) {
+  let lastErr = null;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await fetch(url);
+      if (res.status === 401) { _liveFailed['session'] = true; updateLiveBanner(); return res; }
+      if (res.status >= 500) throw new Error('server ' + res.status);
+      delete _liveFailed[url]; delete _liveFailed['session']; updateLiveBanner();
+      return res;
+    } catch (e) {
+      lastErr = e;
+      if (i < 2) await new Promise(r => setTimeout(r, i === 0 ? 400 : 1200));
+    }
+  }
+  _liveFailed[url] = true; updateLiveBanner();
+  throw lastErr;
+}
 async function loadConsoleRetention() {
   try {
-    const res = await fetch('/api/console-retention');
+    const res = await fetchLive('/api/console-retention');
     const data = await res.json();
     if (data && Array.isArray(data.rows) && data.rows.length) {
       LIVE_CONSOLE_RETENTION = data.rows;
@@ -3933,6 +3945,8 @@ let LIVE_NOTIFICATIONS = [];
    audio/video file is never in here and never leaves the uploading
    browser's IndexedDB - only the file's name, size, duration, the optional
    link, and the note are shared. */
+let LIVE_BHC = [];
+let _bhcSynced = {};
 let LIVE_PROOFS = {};
 let LIVE_RECS = {};
 /* The last snapshot known to match the server, used by setProofs()/setRecs()
@@ -3999,11 +4013,8 @@ function getSettings() {
         'Amira Liyana',
         'Astrid Chen',
         'Calvin Choo',
-        'Cavan Koh',
         'Choo Zhe Hong',
         'George Sim',
-        'Isabelle Wong',
-        'Khor June Yih',
         'Kian Ming',
         'Sook Yan',
         'Tan Ye',
@@ -4039,6 +4050,7 @@ function getData(k) {
   if (k === 'campaignContacts') return LIVE_CAMPAIGN_CONTACTS;
   if (k === 'escalations') return LIVE_ESCALATIONS;
   if (k === 'notifications') return LIVE_NOTIFICATIONS;
+  if (k === 'bhc') return LIVE_BHC;
   if (_memData[k]) return _memData[k];
   try {
     const v = localStorage.getItem('ret2_' + k);
@@ -4074,6 +4086,28 @@ function syncEscalations(rows) {
     body: JSON.stringify({ rows }),
   }).catch(() => {});
 }
+/* Health check sessions sync one row at a time: only the rows that changed
+   since the last sync are sent, and a row is only deleted on the server when
+   this browser deliberately removed it. A full-list replace would let a
+   browser that has not yet seen a teammate's newest session wipe it out. */
+function syncBhcDiff(rows) {
+  const now = {};
+  rows.forEach(r => { if (r && r.ID) now[r.ID] = JSON.stringify(r); });
+  const changed = rows.filter(r => r && r.ID && _bhcSynced[r.ID] !== now[r.ID]);
+  const gone = Object.keys(_bhcSynced).filter(id => !(id in now));
+  const prev = _bhcSynced;
+  _bhcSynced = now;
+  gone.forEach(id => fetch('/api/bhc/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {}));
+  if (changed.length) {
+    const undo = () => { changed.forEach(r => { if (prev[r.ID] === undefined) delete _bhcSynced[r.ID]; else _bhcSynced[r.ID] = prev[r.ID]; }); };
+    fetch('/api/bhc', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows: changed }),
+    }).then(res => {
+      if (!res.ok) { undo(); showToast('A health check did not save. Refresh and try again.'); }
+    }).catch(() => { undo(); showToast('A health check did not save. Check your connection.'); });
+  }
+}
 function syncNotifications(rows) {
   fetch('/api/notifications', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -4087,6 +4121,7 @@ function setData(k, a) {
   if (k === 'campaignContacts') { LIVE_CAMPAIGN_CONTACTS = a; syncCampaignContacts(a); return; }
   if (k === 'escalations') { LIVE_ESCALATIONS = a; syncEscalations(a); return; }
   if (k === 'notifications') { LIVE_NOTIFICATIONS = a; syncNotifications(a); return; }
+  if (k === 'bhc') { LIVE_BHC = a; syncBhcDiff(a); return; }
   _memData[k] = a;
   try {
     localStorage.setItem('ret2_' + k, JSON.stringify(a));
@@ -4258,7 +4293,8 @@ function canonAM(n) {
 function assignableAmList() {
   const list = getSettings().amList || [];
   const aliasKeys = new Set(Object.keys(amAlias()));
-  return list.filter(a => !aliasKeys.has(a));
+  const left = new Set(Object.keys(T).filter(k => T[k].inactive).map(k => T[k].name));
+  return list.filter(a => !aliasKeys.has(a) && !left.has(a));
 }
 
 /* ── who is looking ──
@@ -4649,7 +4685,7 @@ async function deleteFromRemote(tab, id) {
 let LIVE_CHURN_STORES = null;
 async function loadChurnStores() {
   try {
-    const res = await fetch('/api/churn-stores');
+    const res = await fetchLive('/api/churn-stores');
     const data = await res.json();
     if (data && Array.isArray(data.rows) && data.rows.length) LIVE_CHURN_STORES = data.rows;
   } catch (e) {}
@@ -4671,7 +4707,7 @@ function liveUpgradeRow(x) {
 }
 async function loadUpgrades() {
   try {
-    const res = await fetch('/api/upgrades');
+    const res = await fetchLive('/api/upgrades');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) LIVE_UPGRADES = data.rows.map(liveUpgradeRow);
   } catch (e) {}
@@ -4688,7 +4724,7 @@ function liveTimeOffRow(x) {
 }
 async function loadTimeOff() {
   try {
-    const res = await fetch('/api/time-off');
+    const res = await fetchLive('/api/time-off');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) LIVE_TIMEOFF = data.rows.map(liveTimeOffRow);
   } catch (e) {}
@@ -4700,28 +4736,28 @@ async function loadTimeOff() {
    Upgrades/Time off there's no camelCase-to-PascalCase mapping step here. */
 async function loadCampaignActivities() {
   try {
-    const res = await fetch('/api/campaign-activities');
+    const res = await fetchLive('/api/campaign-activities');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) LIVE_CAMPAIGN_ACTIVITIES = data.rows;
   } catch (e) {}
 }
 async function loadCampaignContacts() {
   try {
-    const res = await fetch('/api/campaign-contacts');
+    const res = await fetchLive('/api/campaign-contacts');
     const data = await res.json();
     if (data && data.data && typeof data.data === 'object') LIVE_CAMPAIGN_CONTACTS = data.data;
   } catch (e) {}
 }
 async function loadEscalations() {
   try {
-    const res = await fetch('/api/escalations');
+    const res = await fetchLive('/api/escalations');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) LIVE_ESCALATIONS = data.rows;
   } catch (e) {}
 }
 async function loadNotifications() {
   try {
-    const res = await fetch('/api/notifications');
+    const res = await fetchLive('/api/notifications');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) LIVE_NOTIFICATIONS = data.rows;
   } catch (e) {}
@@ -4730,9 +4766,50 @@ async function loadNotifications() {
    (one per business key), same shape as every other live list - turned
    into the {id: entry} map every existing call site already expects, so
    nothing downstream of getProofs()/getRecs() needed to change. */
+async function loadBhc() {
+  try {
+    const res = await fetchLive('/api/bhc');
+    const data = await res.json();
+    if (data && Array.isArray(data.rows)) {
+      LIVE_BHC = data.rows;
+      _bhcSynced = {};
+      LIVE_BHC.forEach(r => { if (r && r.ID) _bhcSynced[r.ID] = JSON.stringify(r); });
+    }
+  } catch (e) {}
+}
+/* Sessions that were only ever saved in this browser (before health checks
+   were shared) are pushed up once, so teammates and the manager can see
+   them. Only the signed-in person's own sessions go up: anything filed under
+   someone else stays where it is, because it may have been typed in as a
+   test and putting it on a teammate's book would be worse than leaving it. */
+function migrateLocalBhc() {
+  const s = getSettings();
+  if (s.bhcSharedMigration) return;
+  /* Without knowing who is signed in there is no way to tell which sessions
+     are theirs, so do nothing and try again next time rather than marking
+     the job done. */
+  if (!myAM) return;
+  let local = [];
+  try { local = JSON.parse(localStorage.getItem('ret2_bhc') || '[]'); } catch (e) {}
+  if (!Array.isArray(local)) local = [];
+  const have = new Set(LIVE_BHC.map(r => r.ID));
+  const me = canonAM(myAM);
+  const mine = local.filter(r => r && r.ID && !have.has(r.ID) && (!r['AM'] || canonAM(r['AM']) === me));
+  mine.forEach(r => { if (!r['AM']) r['AM'] = myAM; });
+  if (mine.length) setData('bhc', mine.concat(LIVE_BHC));
+  /* The browser's old copy is kept under another name, not deleted, so
+     nothing is lost if something goes wrong; renaming it stops a session
+     someone later deletes from reappearing on the next load. */
+  try {
+    if (local.length) localStorage.setItem('ret2_bhc_before_shared', JSON.stringify(local));
+    localStorage.removeItem('ret2_bhc');
+  } catch (e) {}
+  s.bhcSharedMigration = 1;
+  saveSettings(s);
+}
 async function loadProofs() {
   try {
-    const res = await fetch('/api/proofs');
+    const res = await fetchLive('/api/proofs');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) {
       LIVE_PROOFS = {};
@@ -4743,11 +4820,11 @@ async function loadProofs() {
 }
 async function loadRecs() {
   try {
-    const res = await fetch('/api/call-recordings');
+    const res = await fetchLive('/api/call-recordings');
     const data = await res.json();
     if (data && Array.isArray(data.rows)) {
       LIVE_RECS = {};
-      data.rows.forEach(r => { LIVE_RECS[r.id] = { url: r.url, note: r.note, at: r.at, by: r.by, files: r.files || [] }; });
+      data.rows.forEach(r => { LIVE_RECS[r.id] = { url: r.url, note: r.note, at: r.at, by: r.by, files: r.files || [], merchant: r.merchant || '', docs: r.docs || [], status: (!r.status || r.status === 'pending') ? 'attached' : r.status, submittedAt: r.submittedAt || '', reviewedBy: r.reviewedBy || '', reviewedAt: r.reviewedAt || '', reviewNote: r.reviewNote || '' }; });
       _recsSynced = JSON.parse(JSON.stringify(LIVE_RECS));
     }
   } catch (e) {}
@@ -4890,7 +4967,7 @@ function preLaunchReset() {
      (at its current version) so ensureBhcSeeded() doesn't turn around and
      re-add the three seeded records on this same boot - a genuinely fresh
      browser would otherwise get them right back a few lines later. */
-  setData('bhc', []);
+  /* Health check sessions are shared now - never wipe them from a browser's first-load reset. */
   if (typeof BHC_SEED_VERSION !== 'undefined') s.bhcSeed = BHC_SEED_VERSION;
   /* Upgrade pipeline used to be cleared here too, back when it was seeded
      into each browser's own localStorage. It now lives in the shared
@@ -5896,7 +5973,7 @@ function renderRules() {
  works Saturday, so his Monday has a welcome block whatever the ticket queue
  looks like.
  ══════════════════════════════════════════════════════════════════════════ */
-let cur = 'cavan',
+let cur = 'amira',
   curDay = 0,
   logs = {};
 /* logs was a plain in-memory object with nothing ever writing it to
@@ -5962,7 +6039,10 @@ function personName(k) {
   return T[k] ? T[k].name : String(k).replace(/^am:/, '');
 }
 function peopleList() {
-  return Object.keys(T).map(k => ({
+  /* Someone who has left stays in T (their history and old rows still point at
+     them) but is marked inactive, so they drop out of every list the team
+     works from: Team today, Time off, owner pickers. */
+  return Object.keys(T).filter(k => !T[k].inactive).map(k => ({
     key: k,
     name: T[k].name,
     team: T[k].team,
@@ -6447,7 +6527,7 @@ function agendaFor(k, di) {
   const lv = leaveOn(name, dk);
   if (lv) return [leaveCard(lv, D)];
 
-  const isAct = k === 'cavan';
+  const isAct = false; /* Activation team paused: no welcome batch or overdue calls for now */
   const out = [], add = x => { if (x) out.push(x); };
   const q = buildQueue(name);
   /* Already-contacted-and-evidenced merchants sit out of a FUTURE day's
@@ -6466,15 +6546,31 @@ function agendaFor(k, di) {
   const batchKey = k + '|' + dk;
   const s = getSettings();
   s._batchLog = s._batchLog || {};
+  /* The day's follow-up batch only takes merchants who cancelled in the same
+     month as the day being planned. A merchant who cancelled in an earlier
+     month has already been through its month's follow-up and has its proof
+     attached, so it should not come back around and crowd out this month's
+     cancellations. They stay in the full queue (the Churn risk page and the
+     badge); this only keeps them off the My day card. At-risk live
+     subscriptions are unaffected. */
+  const monthOK = x => x.kind !== 'churned' || monthKey(x.row['Churn Date']) === monthKey(dk);
+  const qm = q.filter(monthOK);
+  const fresh = () => {
+    const b = qm.filter(x => !recentlyHandled(x.row)).slice(0, BATCH);
+    s._batchLog[batchKey] = b.map(x => x.row['ID']);
+    saveSettings(s);
+    return b;
+  };
   let batch;
   if (s._batchLog[batchKey]) {
     const byRowId = {};
     q.forEach(x => { byRowId[x.row['ID']] = x; });
-    batch = s._batchLog[batchKey].map(id => byRowId[id]).filter(Boolean);
+    const frozen = s._batchLog[batchKey].map(id => byRowId[id]).filter(Boolean);
+    /* A batch frozen earlier under the old rule can still hold a merchant from
+       a previous month; rebuild it once, rather than keep showing them. */
+    batch = frozen.some(x => !monthOK(x)) ? fresh() : frozen;
   } else {
-    batch = q.filter(x => !recentlyHandled(x.row)).slice(0, BATCH);
-    s._batchLog[batchKey] = batch.map(x => x.row['ID']);
-    saveSettings(s);
+    batch = fresh();
   }
 
   add(ticketCard('10:00', D.k === 'mon' ? (isAct ? '1h 30m' : '2h') : '1h 30m', D, 'am'));
@@ -7188,6 +7284,10 @@ function upMonth(r) { return monthKey(r['Closing Date']); }
    for anything saved before Filed existed, so nothing already in someone's
    book just vanishes from every month tab. */
 function upFiledMonth(r) {
+  /* A deal that is already closed (upgraded / renewed / extended) belongs to the
+     month it closed in. Filed is only the day somebody typed it in, and an AM
+     back-filling September on 8 October would otherwise see it under October. */
+  if (UP_CLOSED_LOGGED.includes(r['Stage']) && r['Closing Date']) return monthKey(r['Closing Date']);
   return monthKey(r['Filed'] || r['Closing Date'] || String(r['Updated At'] || '').slice(0, 10));
 }
 
@@ -7418,7 +7518,7 @@ function addUpgrade(id) {
     <div id="u-close" style="display:${UP_CLOSED_LOGGED.includes(r ? r['Stage'] : '') ? 'block' : 'none'}">
       <div class="alert alert-blue" style="margin-bottom:12px" id="u-close-note"></div>
       <div class="form-grid form-2">
-        <div class="form-group"><label>Closing date</label><input id="u-date" type="date" value="${esc(r ? r['Closing Date'] : todayKey())}"></div>
+        <div class="form-group"><label>Closing date</label><input id="u-date" type="date" value="${esc(r ? (r['Closing Date'] || r['Filed'] || todayKey()) : todayKey())}"></div>
         <div class="form-group"><label>Value excl SST (RM)</label><input id="u-val" type="number" step="0.01" value="${r ? r['Value'] : ''}" oninput="upCalcMrr()"></div>
       </div>
       <div class="form-grid form-2">
@@ -7491,7 +7591,10 @@ async function saveUpgrade(id) {
   const amEl = document.getElementById('u-am');
   if (amEl && (!id || amEl.value !== amEl.dataset.orig)) payload.am = amEl.value;
   if (UP_CLOSED_LOGGED.includes(stage)) {
-    payload.closingDate = document.getElementById('u-date').value || todayKey();
+    /* Never fall back to "today" on an edit: a row filed or closed in an earlier
+       month must stay in that month when only its stage changes. */
+    payload.closingDate = document.getElementById('u-date').value
+      || (existing && (existing['Closing Date'] || existing['Filed'])) || todayKey();
     payload.value = Number(document.getElementById('u-val').value) || 0;
     payload.mrr = Number(document.getElementById('u-mrr').value) || 0;
     if (stage === 'upgraded' && !payload.mrr) { alert('An upgrade with no earned MRR cannot be counted. Fill in the value and cycle.'); return; }
@@ -7502,6 +7605,13 @@ async function saveUpgrade(id) {
      to it later), separate from Closing Date, which is when it actually
      won. Never touched again on later edits. */
   if (!id) payload.filed = todayKey();
+  /* Older rows were saved before Filed existed and were placed by Closing Date.
+     Pin them to their current month on the first edit, so changing the stage
+     or the date can no longer move them to another month's tab. */
+  else if (existing && !existing['Filed']) {
+    const m0 = upFiledMonth(existing);
+    if (m0) payload.filed = m0 + '-01';
+  }
 
   let res, data;
   try {
@@ -7661,7 +7771,22 @@ function bhcDoneIn(person, mk) {
     }));
   return out.sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
-function bhcHasRec(x) { return !!(x.sid && hasRec('hc-' + x.sid)); }
+/* A session counts towards KPI 3 once it has evidence that has not been
+   sent back. The manager reviews that evidence with the incentive claim, and
+   cannot approve the claim while any of it is still unreviewed. */
+function bhcRecState(x) { return x.sid ? recStatus(getRecs()['hc-' + x.sid]) : 'none'; }
+function bhcHasRec(x) { const st = bhcRecState(x); return st === 'attached' || st === 'approved'; }
+function bhcNotCountingText(sm) {
+  const parts = [];
+  if (sm.rejected) parts.push(sm.rejected + ' sent back');
+  if (sm.none) parts.push(sm.none + ' with no evidence yet');
+  const total = sm.rejected + sm.none;
+  return parts.join(', ') + ', so ' + (total === 1 ? 'it does' : 'they do') + ' not count yet.';
+}
+function bhcRecSummary(list) {
+  const n = st => list.filter(x => bhcRecState(x) === st).length;
+  return { approved: n('approved'), attached: n('attached'), rejected: n('rejected'), none: n('none') };
+}
 /* Two ways in. The merchant name opens the diagnosis that was written up; the
    recording button opens the audio attached to that check. A stamped record
    with no diagnosis behind it has only the second. */
@@ -7674,7 +7799,7 @@ function bhcOpenDiagnosis(id, sid) {
   bhcOpenRecording(sid, 'Store ' + sid);
 }
 function bhcOpenRecording(sid, merchant) {
-  if (!sid) { alert('This check has no merchant record attached, so there is nowhere to keep the recording. Open it under Retention, Health check and pick the merchant.'); return; }
+  if (!sid) { alert('This check has no merchant record attached, so there is nowhere to keep the evidence. Open it under Retention, Health check and pick the merchant.'); return; }
   askRec('hc-' + sid, merchant);
 }
 
@@ -7702,8 +7827,10 @@ function incFigures(person, mk) {
        showed the team losing RM 20,056 in August alone. A KPI nobody can fail
        is not a KPI. The console quarter is split across the team, and the
        personal figure is still shown beside it. */
-    churnedMrrMonth: consoleChurnMonth(mk) / TEAM_SIZE,
-    churnedMrrQuarter: consoleChurnQuarter(mk) / TEAM_SIZE,
+    /* KPI 1 is judged on the whole team's gross churn MRR (the console's
+       Churn- column), not split between people. */
+    churnedMrrMonth: consoleChurnMonth(mk),
+    churnedMrrQuarter: consoleChurnQuarter(mk),
     consoleChurnQ: consoleChurnQuarter(mk),
     ownChurnMonth: lost(churnM), ownChurnQuarter: lost(churnQ),
     churnedCountMonth: churnM.length,
@@ -7714,6 +7841,7 @@ function incFigures(person, mk) {
     bhc: bhc.filter(bhcHasRec).length,
     bhcHeld: bhc.length,
     bhcList: bhc,
+    bhcSum: bhcRecSummary(bhc),
     rescued,
   };
 }
@@ -7849,7 +7977,7 @@ function claimPreviewCard(person, mk) {
   const c = incCalc(person, mk), f = c.f, t = c.t;
   const NAVY = 'var(--navy)', BODY = 'var(--body)', MUTED = 'var(--muted)', LINE = 'var(--line)';
   const kpis = [
-    ['1  Churn Control', rmLoss(f.churnedMrrQuarter) + ' churned MRR in ' + f.q + ', cap ' + rmLoss(KPI_CHURN_QUARTER), c.kpi1],
+    ['1  Churn Control', rmLoss(f.churnedMrrQuarter) + ' team gross churn MRR in ' + f.q + ', cap ' + rm(KPI_CHURN_QUARTER), c.kpi1],
     ['2  Merchant Growth Enablement', rm(f.upsellRevenue) + ' of ' + rm(KPI_UPGRADE_REVENUE) + ' revenue', c.kpi2],
     ['3  Merchant Relationship & Coverage', f.bhc + ' of ' + KPI_BHC_MONTH + ' check-ins', c.kpi3],
   ];
@@ -7912,7 +8040,9 @@ function doSubmitClaim(person, mk) {
   /* The Pending to approve list only shows up when Sook Yan happens to open
      Incentive Scheme. Without a notification the moment a claim lands, she
      would have no way to know one is waiting on her at all. */
-  notify(MANAGERS[0], `${canonAM(myAM) || person} submitted ${rm(c.payable)} for ${monthLabel(mk)}, waiting on your approval.`, { view: 'incentive', person, month: mk });
+  const sm = c.f.bhcSum || { attached: 0, rejected: 0, none: 0 };
+  const evNote = sm.attached ? ` ${sm.attached} health check evidence to review with it.` : '';
+  notify(MANAGERS[0], `${canonAM(myAM) || person} submitted ${rm(c.payable)} for ${monthLabel(mk)}, waiting on your approval.${evNote}`, { view: 'incentive', person, month: mk });
   closeModal(); render();
 }
 /* ── the status timeline ──
@@ -7970,6 +8100,14 @@ function approveClaim(person, mk) {
   const s = getSettings();
   const cl = (s.incClaims || {})[incKey(person, mk)];
   if (!cl) return;
+  /* The health check evidence is reviewed together with the claim: the claim
+     cannot be approved while any session's evidence is still unreviewed. */
+  const unreviewed = isManager() ? bhcRecSummary(bhcDoneIn(person, mk)).attached : 0;
+  if (unreviewed) {
+    alert(unreviewed + ' health check evidence still to review. Open the claim, review each one (or use "Approve all evidence"), then approve.');
+    reviewClaim(person, mk);
+    return false;
+  }
   const c = incCalc(person, mk);
   const wasApprovedByManager = isManager() && cl.status === 'pending' && canonAM(myAM) !== canonAM(person);
   cl.status = 'approved'; cl.payable = c.payable;
@@ -8039,11 +8177,12 @@ function reviewClaim(person, mk) {
   const cl = incClaim(person, mk);
   openModal(`Review claim · ${esc(person)}, ${monthLabel(mk)}`, `
     ${claimPreviewCard(person, mk)}
+    ${claimEvidenceHtml(person, mk)}
     ${claimTimeline(person, mk) ? `<div style="border:1px solid var(--line);border-radius:12px;margin-top:14px;background:#fff">${claimTimeline(person, mk).replace('border-top:1px solid var(--line);', '')}</div>` : ''}
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
       <button class="btn btn-ghost" onclick="closeModal()">Close</button>
       <button class="btn btn-ghost" style="color:var(--pink)" onclick="closeModal();sendBackClaim('${jsAttr(person)}','${mk}')">Send back</button>
-      <button class="btn btn-green" onclick="approveClaim('${jsAttr(person)}','${mk}');closeModal()">Approve${cl ? ' ' + rm(cl.payable) : ''}</button>
+      <button class="btn btn-green" onclick="if(approveClaim('${jsAttr(person)}','${mk}')!==false)closeModal()">Approve${cl ? ' ' + rm(cl.payable) : ''}</button>
     </div>`, 'wide');
 }
 /* what the button row under "What you would claim" shows, for whoever is
@@ -8191,17 +8330,17 @@ function renderIncentive() {
       <div class="tbl-wrap"><table>
         <thead><tr><th></th><th>KPI</th><th>Expectation</th><th>This month</th></tr></thead>
         <tbody>
-          ${kpiRow(c.kpi1, 1, 'Churn Control', '≤ ' + rmLoss(KPI_CHURN_QUARTER) + ' a quarter',
+          ${kpiRow(c.kpi1, 1, 'Churn Control', 'Team gross churn within ' + rm(KPI_CHURN_QUARTER) + ' a quarter',
             rmLoss(f.churnedMrrQuarter) + ' in ' + f.q,
-            'Your share of the team\'s churn. <a href="' + CONSOLE_URL + '" target="_blank" rel="noopener" style="color:var(--blue);font-weight:600">Console</a> says ' + rmLoss(f.consoleChurnQ) + ' for ' + f.q + ', split ' + TEAM_SIZE + '.')}
+            'The whole team\'s gross churn MRR (the <a href="' + CONSOLE_URL + '" target="_blank" rel="noopener" style="color:var(--blue);font-weight:600">Console</a>\'s Churn- column), not split per person. <button class="lnk" onclick="go(\'reports-overview\')">See the months</button>')}
           ${kpiRow(c.kpi2, 2, 'Merchant Growth Enablement', rm(KPI_UPGRADE_REVENUE) + ' of upgrade revenue a month',
             rm(f.upsellRevenue) + ' from ' + f.upgrades + ' upgrade' + (f.upgrades === 1 ? '' : 's'),
             'Paid on the ' + rm(f.upsellMrr) + ' of earned MRR. <button class="lnk" onclick="go(\'upgrade\')">See the pipeline</button>')}
-          ${kpiRow(c.kpi3, 3, 'Merchant Relationship & Coverage', KPI_BHC_MONTH + ' recorded check-ins a month',
-            f.bhc + ' recorded' + (f.bhcHeld > f.bhc ? ', ' + f.bhcHeld + ' held' : ''),
+          ${kpiRow(c.kpi3, 3, 'Merchant Relationship & Coverage', KPI_BHC_MONTH + ' check-ins with evidence a month',
+            f.bhc + ' with evidence' + (f.bhcHeld > f.bhc ? ', ' + f.bhcHeld + ' held' : ''),
             (f.bhcHeld > f.bhc
-              ? '<b style="color:var(--pink)">' + (f.bhcHeld - f.bhc) + ' held with no recording, so ' + (f.bhcHeld - f.bhc === 1 ? 'it does' : 'they do') + ' not count.</b> '
-              : 'A session counts once the recording is attached. ')
+              ? '<b style="color:var(--pink)">' + bhcNotCountingText(f.bhcSum) + '</b> '
+              : 'A session counts once its recording link or file is attached' + (f.bhcSum.attached ? ', and is reviewed when the claim is approved' : '') + '. ')
             + '<button class="lnk" onclick="go(\'performance\')">See which merchants</button>')}
         </tbody></table></div>
     </div>
@@ -8217,7 +8356,7 @@ function renderIncentive() {
         <div class="tbl-wrap"><table>
           <thead><tr><th>Who</th><th>Month</th><th>Submitted</th><th style="text-align:right">Claiming</th><th></th></tr></thead>
           <tbody>${pending.map(p => `<tr>
-            <td><b style="color:var(--navy)">${esc(p.person)}</b></td>
+            <td><b style="color:var(--navy)">${esc(p.person)}</b>${(() => { const n = bhcRecSummary(bhcDoneIn(p.person, p.mk)).attached; return n ? `<div class="ms" style="color:var(--amber);font-weight:600;white-space:normal">${n} health check evidence to review</div>` : ''; })()}</td>
             <td>${monthLabel(p.mk)}</td>
             <td class="ms">${esc(String(p.claim.submittedAt).slice(0, 10))} by ${esc(p.claim.submittedBy)}</td>
             <td class="cx-amt">${rm(p.claim.payable)}${p.moved ? `<div class="ms" style="color:var(--pink);white-space:normal">now calculates to ${rm(p.current)}</div>` : ''}</td>
@@ -8394,7 +8533,7 @@ function downloadClaim() {
 
   g.fillStyle = MUTED; g.font = F(600, 10.5); g.fillText('KEY PERFORMANCE INDICATORS', 34, y); y += 16;
   const kpis = [
-    ['1  Churn Control', rmLoss(f.churnedMrrQuarter) + ' churned MRR in ' + f.q + ', cap ' + rmLoss(KPI_CHURN_QUARTER), c.kpi1],
+    ['1  Churn Control', rmLoss(f.churnedMrrQuarter) + ' team gross churn MRR in ' + f.q + ', cap ' + rm(KPI_CHURN_QUARTER), c.kpi1],
     ['2  Merchant Growth Enablement', rm(f.upsellRevenue) + ' of ' + rm(KPI_UPGRADE_REVENUE) + ' revenue', c.kpi2],
     ['3  Merchant Relationship & Coverage', f.bhc + ' of ' + KPI_BHC_MONTH + ' check-ins', c.kpi3],
   ];
@@ -8687,21 +8826,39 @@ function renderReportsOverview() {
       <p class="sect">${months.length} month${months.length === 1 ? '' : 's'}, side by side</p>
       <div class="section">
         <div class="tbl-wrap"><table>
-          <thead><tr><th>Month</th><th>Retention GR</th><th>MRR net churn</th><th>%</th><th>Churned</th><th>Retained</th><th>Stores net</th><th>Total stores</th><th>Monthly MRR</th><th>Upgraded</th></tr></thead>
+          <thead><tr><th>Month</th><th>Retention GR</th><th>MRR net churn</th><th>%</th><th>Churn MRR</th><th>%</th><th>Retain MRR</th><th>%</th><th>Stores net</th><th>Total stores</th><th>Monthly MRR</th><th>Upgraded</th></tr></thead>
           <tbody>${months.slice().reverse().map(m => { const x = cr(m), u = g.up.filter(r => monthKey(r['Closing Date']) === m);
+            const pc = v => x.totalMrr ? ((v / x.totalMrr) * 100).toFixed(1) + '%' : '';
             return `<tr${m === mk ? ' style="background:var(--blue-soft)"' : ''}>
               <td><b style="color:var(--navy)">${monthLabel(m)}</b></td>
               <td class="cx-amt">${rm(x.retentionGr)}</td>
               <td class="cx-amt" style="color:${x.mrrNet < 0 ? 'var(--pink)' : 'var(--green)'}">${rm(x.mrrNet)}</td>
               <td class="ms">${x.mrrNetPct}%</td>
-              <td class="cx-amt ms">${rm(x.mrrChurn)}</td>
-              <td class="cx-amt ms">${rm(x.mrrRetain)}</td>
+              <td class="cx-amt" style="color:var(--pink)">${rm(x.mrrChurn)}</td>
+              <td class="ms">${pc(x.mrrChurn)}</td>
+              <td class="cx-amt" style="color:var(--green)">${rm(x.mrrRetain)}</td>
+              <td class="ms">${pc(x.mrrRetain)}</td>
               <td style="text-align:right;color:${x.storeNet < 0 ? 'var(--pink)' : 'var(--green)'}">${x.storeNet}</td>
               <td style="text-align:right">${x.totalStore.toLocaleString()}</td>
               <td class="cx-amt">${rm(x.totalMrr)}</td>
               <td style="text-align:right">${u.length ? `<button class="lnk" onclick="openUpgradeMonth('${m}')">${u.length}</button>` : ''}</td></tr>`; }).join('')}</tbody>
         </table></div>
       </div>
+
+      ${(() => {
+        const qs = [...new Set(months.map(quarterOf))].sort().reverse();
+        return `<div class="section"><div class="section-body">
+          <h3 style="margin:0 0 4px;font-size:14px;color:var(--navy)">Gross churn MRR by quarter</h3>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 12px;line-height:1.6">The Churn MRR column added up over each quarter. This is the figure KPI 1 judges the whole team on, against the ${rm(KPI_CHURN_QUARTER)} cap.</p>
+          ${qs.map(q => { const ms = monthsInQuarter(q).filter(m => cr(m)), tot = consoleChurnQuarter(ms[0] || q + '-01');
+            const done = monthsInQuarter(q).every(m => cr(m)) && isQuarterEnd(monthsInQuarter(q)[2]) && monthsInQuarter(q)[2] < monthKey(todayKey());
+            return `<div class="brow2" style="border-top:1px solid var(--line);padding:9px 0;gap:12px;flex-wrap:wrap">
+              <b style="color:var(--navy);min-width:80px">${q}</b>
+              <span class="cx-amt" style="color:var(--pink);min-width:110px">${rmLoss(tot)}</span>
+              <span class="ms" style="flex:1">${ms.map(m => monthLabel(m).split(' ')[0] + ' ' + rmLoss(consoleChurnMonth(m))).join(' + ')}${done ? '' : ' so far'}</span>
+              <span style="font-weight:700;color:${tot <= KPI_CHURN_QUARTER ? 'var(--green)' : 'var(--pink)'}">${tot <= KPI_CHURN_QUARTER ? 'KPI 1 met' : 'KPI 1 not met'}</span></div>`; }).join('')}
+        </div></div>`;
+      })()}
 
       <p class="sect">The layer the console does not have</p>
       <div class="rgrid">
@@ -8792,7 +8949,7 @@ function renderReportsChurn() {
         ${(() => { const by = {}; g.wbM.forEach(r => { const a = r['AM'] || 'Unassigned'; by[a] = (by[a] || 0) + (Number(r['Churn MRR']) || 0); });
           const e = Object.entries(by).sort((a, b) => b[1] - a[1]);
           return e.length ? bars(e.map(([a, v]) => [esc(a), v, a === 'Unassigned' ? '#B9C4D6' : 'var(--pink)', rm(v)])) : '<p class="cap">Nothing to show.</p>'; })()}
-        <div class="rnote"><b>KPI 1 caps this at ${rm(KPI_CHURN_QUARTER)} a person a quarter</b>A single month does not decide it, so read these bars as a trend. Bars read zero where the MRR was never recorded, not because nothing was lost.</div>
+        <div class="rnote"><b>KPI 1 caps the whole team at ${rm(KPI_CHURN_QUARTER)} a quarter</b>A single month does not decide it, so read these bars as a trend. Bars read zero where the MRR was never recorded, not because nothing was lost.</div>
       </div>
     </div>
     <p class="sect">Illustrative</p>${demoNote()}
@@ -9265,6 +9422,10 @@ const BHC_SEED = [
    started on a store outside the seed is left alone. */
 const BHC_SEED_VERSION = 2;
 function ensureBhcSeeded() {
+  /* Sessions are shared in the database now, so a browser must never seed its
+     own copy of the historical ones: every browser doing so would put a
+     duplicate set on everyone's book. */
+  return 0;
   const s = getSettings();
   if ((s.bhcSeed || 0) >= BHC_SEED_VERSION) return 0;
   const seeded = new Set(BHC_SEED.map(b => b[0]));
@@ -9577,7 +9738,7 @@ function renderHealthCheck() {
               <td style="font-size:11.5px">${esc(r['Next Follow Up'] || 'n/a')}</td>
               <td class="ms">${esc(r['AM'] || 'n/a')}</td>
               <td style="white-space:nowrap">
-                <button class="btn btn-xs btn-ghost" onclick="askRec('hc-${jsAttr(r['Store ID'] || r['ID'])}','${jsAttr(r['Merchant'])}')">Recording</button>
+                <button class="btn btn-xs btn-ghost" onclick="askRec('hc-${jsAttr(r['Store ID'] || r['ID'])}','${jsAttr(r['Merchant'])}')">Evidence${(() => { const st = recStatus(getRecs()['hc-' + (r['Store ID'] || r['ID'])]); return st === 'none' ? '' : st === 'approved' ? ' ✓' : st === 'rejected' ? ' ✗' : ' …'; })()}</button>
                 <button class="btn btn-xs btn-ghost" onclick="bhcQuickEdit('${r['ID']}')">Edit</button>
                 <button class="btn btn-xs btn-wa" onclick="bhcWorkspace('${r['ID']}')">Open</button>
               </td>
@@ -11023,7 +11184,7 @@ function perfFigures(person, mk) {
     mk, person,
     bhc: bhcProof.length,
     bhcHeld: bhcAll.length, bhcProof: bhcProof.length, bhcSummarised: bhcSummarised.length,
-    bhcList: bhcAll, research: research.length,
+    bhcList: bhcAll, bhcSum: bhcRecSummary(bhcAll), research: research.length,
     upCount: up.length, upRevenue: up.reduce((a, r) => a + (Number(r['Value']) || 0), 0),
     upMrr: up.reduce((a, r) => a + (Number(r['MRR']) || 0), 0), upList: up,
     pipeline: pipeline.length, pipelineMrr: pipeline.reduce((a, r) => a + (Number(r['MRR']) || 0), 0),
@@ -11095,8 +11256,8 @@ function renderPerformance() {
         f.upCount + ' upgrade' + (f.upCount === 1 ? '' : 's') + ' · ' + rm(f.upMrr) + ' earned MRR, which is what gets paid')}
       ${kpiCard(kpi3, 'Relationship and coverage', f.bhc, KPI_BHC_MONTH, 'n',
         f.bhcHeld > f.bhc
-          ? '<b style="color:var(--pink)">' + (f.bhcHeld - f.bhc) + ' of ' + f.bhcHeld + ' held without a recording, so not counted</b>'
-          : f.bhcHeld ? 'all ' + f.bhcHeld + ' recorded' : 'no sessions logged this month')}
+          ? '<b style="color:var(--pink)">' + bhcNotCountingText(f.bhcSum) + '</b>'
+          : f.bhcHeld ? 'all ' + f.bhcHeld + ' approved' : 'no sessions logged this month')}
       <div class="card ${f.netMrr >= 0 ? 'card-green' : 'card-red'}">
         <div class="card-num">${rm(f.netMrr)}</div><div class="card-label">Your net MRR</div>
         <div class="card-sub">${rm(f.rescuedMrr)} saved plus ${rm(f.upMrr)} grown, less ${rm(f.churnedMrr)} lost</div></div>
@@ -11109,27 +11270,29 @@ function renderPerformance() {
         ${figs([
           ['Researched', f.research, '', "go('healthcheck')"],
           ['Sessions held', f.bhcHeld, '', "go('healthcheck')"],
-          ['Recorded, so counted', f.bhc, f.bhc >= KPI_BHC_MONTH ? 'var(--green)' : 'var(--pink)', "go('team-proof')"],
+          ['With evidence, so counted', f.bhc, f.bhc >= KPI_BHC_MONTH ? 'var(--green)' : 'var(--pink)', "go('healthcheck')"],
+          ['Reviewed and approved', f.bhcSum.approved, f.bhcSum.approved ? 'var(--green)' : '', "go('healthcheck')"],
           ['Summarised', f.bhcSummarised, '', "go('healthcheck')"],
         ])}
-        <div class="rnote"><b>No recording, no count</b>The bonus is RM ${BHC_BONUS} at ${KPI_BHC_MONTH} recorded sessions. Holding the call is not the evidence; the recording is.</div>
+        <div class="rnote"><b>No evidence, no count</b>The bonus is RM ${BHC_BONUS} at ${KPI_BHC_MONTH} sessions with evidence. Holding the call is not the evidence; the recording link or file is. ${esc(MANAGERS[0])} reviews it when you submit your claim.</div>
       </div>
 
       <div class="rcard">
         <h3>Which merchants</h3><div class="cap">${f.bhc ? f.bhc + ' checked in ' + monthLabel(perfMonth) : monthLabel(perfMonth) + ' · nothing yet'}</div>
         ${f.bhcList.length ? f.bhcList.map(x => {
-          const rec = bhcHasRec(x);
+          const st = bhcRecState(x), rec = st === 'approved';
+          const lab = { approved: ['approved, counts', 'var(--green)'], attached: ['attached, counts. Reviewed with your claim', 'var(--amber)'], rejected: ['sent back, fix it to count again', 'var(--pink)'], none: ['no evidence, does not count', 'var(--pink)'] }[st];
           return `<div class="mrow2${rec ? '' : ' nope'}">
             <div style="min-width:0;flex:1">
               <button class="lnk" onclick="bhcOpenDiagnosis('${jsAttr(x.id)}','${jsAttr(x.sid)}')">${esc(x.merchant)}</button>
               <div class="ms">${esc(x.date)}${x.score !== null ? ' · ' + x.score + '/100' : ''}${x.leak ? ' · ' + esc(leakLabel(x.leak)) : ''}</div>
-              <div class="ms" style="color:${rec ? 'var(--green)' : 'var(--pink)'};font-weight:600">${rec ? 'recorded, counts' : 'no recording, does not count'}</div>
+              <div class="ms" style="color:${lab[1]};font-weight:600">${lab[0]}</div>
             </div>
-            <button class="btn btn-xs ${rec ? 'btn-wa' : 'btn-navy'}" onclick="bhcOpenRecording('${jsAttr(x.sid)}','${jsAttr(x.merchant)}')">${rec ? 'Play' : 'Attach'}</button>
+            <button class="btn btn-xs ${st === 'none' ? 'btn-navy' : 'btn-wa'}" onclick="bhcOpenRecording('${jsAttr(x.sid)}','${jsAttr(x.merchant)}')">${st === 'none' ? 'Attach' : (isManager() && st === 'attached' ? 'Review' : 'View')}</button>
           </div>`;
         }).join('')
           : '<p class="cap">No session has been marked done this month. A check counts on the date the session was held, not the date it was booked.</p>'}
-        <div class="rnote"><b>${f.bhcHeld - f.bhc > 0 ? (f.bhcHeld - f.bhc) + ' session' + (f.bhcHeld - f.bhc === 1 ? '' : 's') + ' not counting yet' : f.bhcHeld ? 'Every session is evidenced' : 'Nothing to evidence yet'}</b>Attach the recording and it counts towards the ${KPI_BHC_MONTH}. Click a merchant to reopen the diagnosis.</div>
+        <div class="rnote"><b>${f.bhcHeld - f.bhc > 0 ? (f.bhcHeld - f.bhc) + ' session' + (f.bhcHeld - f.bhc === 1 ? '' : 's') + ' not counting yet' : f.bhcHeld ? 'Every session has evidence' : 'Nothing to evidence yet'}</b>Add a recording link or attach a file and it counts towards the ${KPI_BHC_MONTH}. ${esc(MANAGERS[0])} reviews it when you submit your claim. Click a merchant to reopen the diagnosis.</div>
       </div>
 
       <div class="rcard">
@@ -13498,8 +13661,11 @@ function syncRecsDiff(oldR, newR) {
         body: JSON.stringify({
           id: k, url: newR[k].url, note: newR[k].note, at: newR[k].at, by: newR[k].by,
           files: recFiles(newR[k]).map(f => ({ id: f.id, name: f.name, size: f.size, type: f.type, mins: f.mins, stored: f.stored, playable: f.playable })),
+          merchant: newR[k].merchant, docs: recDocs(newR[k]), status: newR[k].status, submittedAt: newR[k].submittedAt,
+          reviewedBy: newR[k].reviewedBy, reviewedAt: newR[k].reviewedAt, reviewNote: newR[k].reviewNote,
         }),
-      }).catch(() => {});
+      }).then(res => { if (!res.ok) showToast('The evidence did not save. Refresh and try again.'); })
+        .catch(() => showToast('The evidence did not save. Check your connection.'));
     }
   });
   Object.keys(oldR).forEach(k => {
@@ -13622,114 +13788,357 @@ function recFiles(r) {
   return r.name ? [{ id: '0', name: r.name, size: r.size, type: r.type, mins: r.mins, stored: r.stored }] : [];
 }
 function mediaKeyFor(key, f) { return f.id === '0' ? 'rec:' + key : 'rec:' + key + ':' + f.id; }
-function hasRec(k) { const r = getRecs()[k]; return !!(r && (recFiles(r).length || r.url)); }
+function hasRec(k) { const r = getRecs()[k]; return !!(r && (recFiles(r).length || recDocs(r).length || r.url)); }
+
+/* ── health check evidence ──
+   A health check is evidenced by a link (Google Drive, Zoom, Crisp, wherever
+   the recording lives), by attached files (images, PDFs, audio or video up
+   to 25 MB), or both. Files are stored in the database so the manager can
+   open them on her own computer. Account managers attach evidence whenever
+   they like and it counts straight away; the manager reviews it, session by
+   session, when they submit their incentive claim, and cannot approve the
+   claim until every session in it has been reviewed. */
+const REC_MAX_MB = 25, REC_CHUNK = 1.5 * 1048576;
+function recDocs(r) { return (r && Array.isArray(r.docs)) ? r.docs : []; }
+/* none | attached (saved, not reviewed yet) | approved | rejected */
+function recStatus(r) {
+  if (!r || !(recFiles(r).length || recDocs(r).length || r.url)) return 'none';
+  return (!r.status || r.status === 'pending') ? 'attached' : r.status;
+}
+function recStatusChip(r) {
+  const s = recStatus(r);
+  const m = { approved: ['Approved', 'var(--green)'], attached: ['Attached, to be reviewed', 'var(--amber)'], rejected: ['Sent back', 'var(--pink)'] }[s];
+  return m ? `<span class="pill" style="color:${m[1]};font-weight:700">${m[0]}</span>` : '';
+}
+function recMerchant(key) {
+  const r = getRecs()[key] || {};
+  if (r.merchant) return r.merchant;
+  const sid = String(key).replace(/^hc-/, '');
+  const b = getData('bhc').filter(x => String(x['Store ID'] || x['ID']) === sid)[0];
+  return (b && b['Merchant']) || 'Store ' + sid;
+}
+function recOwner(key) {
+  const sid = String(key).replace(/^hc-/, '');
+  const b = getData('bhc').filter(x => String(x['Store ID'] || x['ID']) === sid)[0];
+  const r = getRecs()[key] || {};
+  return (b && b['AM']) || r.by || '';
+}
+
+/* The sessions in a claim, each with its evidence and a way to review it.
+   Shown inside the claim review, so evidence and incentive are approved in
+   one place. */
+let _recReturn = null;
+function claimEvidenceHtml(person, mk) {
+  const list = bhcDoneIn(person, mk);
+  const sm = bhcRecSummary(list);
+  if (!list.length) return `<div class="rnote" style="margin-top:14px"><b>No health checks logged for ${monthLabel(mk)}</b>Nothing to review for KPI 3.</div>`;
+  return `<div style="border:1px solid var(--line);border-radius:12px;margin-top:14px;background:#fff;padding:14px 16px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <b style="color:var(--navy);font-size:13.5px">Health check evidence, ${monthLabel(mk)}</b>
+      <span class="ms" style="flex:1">${sm.approved} approved${sm.attached ? ', ' + sm.attached + ' to review' : ''}${sm.rejected ? ', ' + sm.rejected + ' sent back' : ''}${sm.none ? ', ' + sm.none + ' with none' : ''}</span>
+      ${sm.attached ? `<button class="btn btn-xs btn-green" onclick="approveAllEvidence('${jsAttr(person)}','${mk}')">Approve all evidence</button>` : ''}
+    </div>
+    ${list.map(x => {
+      const st = bhcRecState(x), r = getRecs()['hc-' + x.sid];
+      return `<div class="brow2" style="border-top:1px solid var(--line);padding:8px 0;gap:10px">
+        <span style="flex:1;min-width:0"><b style="color:var(--navy)">${esc(x.merchant)}</b> <span class="ms">${esc(x.date)}</span>
+          ${r && r.note ? `<div class="ms" style="white-space:normal">${esc(r.note)}</div>` : ''}</span>
+        ${st === 'none' ? '<span class="ms" style="color:var(--pink);font-weight:600">no evidence</span>' : recStatusChip(r)}
+        ${st === 'none' ? '' : `<button class="btn btn-xs ${st === 'attached' ? 'btn-navy' : 'btn-ghost'}" onclick="recFromClaim('${jsAttr('hc-' + x.sid)}','${jsAttr(x.merchant)}','${jsAttr(person)}','${mk}')">${st === 'attached' ? 'Review' : 'View'}</button>`}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+function recFromClaim(key, who, person, mk) {
+  _recReturn = { person, mk };
+  askRec(key, who);
+}
+function recLeave() {
+  const back = _recReturn; _recReturn = null;
+  if (back) reviewClaim(back.person, back.mk); else closeModal();
+}
+function approveAllEvidence(person, mk) {
+  if (!isManager()) return;
+  const keys = bhcDoneIn(person, mk).map(x => 'hc-' + x.sid).filter(k => recStatus(getRecs()[k]) === 'attached');
+  if (!keys.length) return;
+  const recs = getRecs(), now = new Date().toISOString();
+  keys.forEach(k => { recs[k] = { ...recs[k], status: 'approved', reviewedBy: myAM || MANAGERS[0], reviewedAt: now, reviewNote: '' }; });
+  setRecs(recs);
+  if (canonAM(person) !== canonAM(myAM)) notify(person, `${canonAM(myAM)} approved your health check evidence for ${monthLabel(mk)} (${keys.length} session${keys.length === 1 ? '' : 's'}).`, 'performance');
+  reviewClaim(person, mk);
+  showToast('Approved ' + keys.length + ' piece' + (keys.length === 1 ? '' : 's') + ' of evidence.');
+}
+
+/* An image is shrunk before it goes up (a phone screenshot can be several MB).
+   Everything else is sent as it is, in slices, so a recording of tens of MB
+   never has to fit in one request. */
+function readAttach(file) {
+  return new Promise((resolve, reject) => {
+    const type = file.type || '';
+    const okType = /^(image|audio|video)\//.test(type) || type === 'application/pdf' || /\.(mp3|m4a|wav|mp4|mov|m4v|webm|aac|ogg)$/i.test(file.name);
+    if (!okType) { reject(file.name + ' is not an image, PDF, audio or video file. For anything else, paste a Google Drive link.'); return; }
+    if (file.size > REC_MAX_MB * 1048576) { reject(file.name + ' is over ' + REC_MAX_MB + ' MB. Paste a Google Drive link to it instead.'); return; }
+    if (!/^image\//.test(type) || /gif/.test(type)) {
+      resolve({ id: uuid(), name: file.name, type: type || 'application/octet-stream', size: file.size, file });
+      return;
+    }
+    const fr = new FileReader();
+    fr.onerror = () => reject('Could not read ' + file.name + '.');
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject('Could not open ' + file.name + ' as an image.');
+      img.onload = () => {
+        const max = 1600, sc = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * sc)); c.height = Math.max(1, Math.round(img.height * sc));
+        const g = c.getContext('2d');
+        g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(img, 0, 0, c.width, c.height);
+        const b64 = c.toDataURL('image/jpeg', 0.82).split(',')[1];
+        resolve({ id: uuid(), name: file.name.replace(/\.[^.]+$/, '') + '.jpg', type: 'image/jpeg', size: Math.round(b64.length * 0.75), data: b64 });
+      };
+      img.src = String(fr.result);
+    };
+    fr.readAsDataURL(file);
+  });
+}
+function sliceToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error('read failed'));
+    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+    fr.readAsDataURL(blob);
+  });
+}
+/* Sends one pending file, slice by slice. Returns an error message, or '' if it went up. */
+async function uploadRecFile(f, key, progress) {
+  const slices = f.data ? [f.data] : null;
+  const total = slices ? 1 : Math.max(1, Math.ceil(f.file.size / REC_CHUNK));
+  for (let i = 0; i < total; i++) {
+    if (progress) progress(i + 1, total);
+    let data;
+    try { data = slices ? slices[0] : await sliceToBase64(f.file.slice(i * REC_CHUNK, (i + 1) * REC_CHUNK)); }
+    catch (e) { return 'Could not read ' + f.name + '.'; }
+    try {
+      const res = await fetch('/api/recording-files', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: f.id, key, name: f.name, type: f.type, size: f.size, data, idx: i, total }),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); return d.error || 'The upload was refused.'; }
+    } catch (e) { return 'Check your connection.'; }
+  }
+  return '';
+}
 
 let _recPending = [];
+function recStatusBanner(r) {
+  const s = recStatus(r);
+  if (s === 'none') return '';
+  const when = d => d ? ' on ' + String(d).slice(0, 10) : '';
+  if (s === 'approved') return `<div style="background:#E9F7EF;border:1px solid #BFE5CF;border-radius:10px;padding:10px 13px;margin-bottom:14px;font-size:12.5px;line-height:1.55"><b style="color:var(--green)">Approved</b> by ${esc(r.reviewedBy || 'the manager')}${when(r.reviewedAt)}.${r.reviewNote ? ' ' + esc(r.reviewNote) : ''}</div>`;
+  if (s === 'rejected') return `<div style="background:#FDECF1;border:1px solid #F4C3D2;border-radius:10px;padding:10px 13px;margin-bottom:14px;font-size:12.5px;line-height:1.55"><b style="color:var(--pink)">Sent back</b> by ${esc(r.reviewedBy || 'the manager')}${when(r.reviewedAt)}: ${esc(r.reviewNote || 'no reason given')}. Fix it and save again, and it counts again.</div>`;
+  return `<div style="background:#FFF8E1;border:1px solid #F0E0A8;border-radius:10px;padding:10px 13px;margin-bottom:14px;font-size:12.5px;line-height:1.55"><b style="color:var(--amber)">Attached.</b> It counts towards KPI 3 now, and ${esc(MANAGERS[0])} reviews it together with your incentive claim.</div>`;
+}
 function askRec(key, who) {
   _recPending = [];
   const r = getRecs()[key] || {};
+  const mgr = isManager();
+  const has = recStatus(r) !== 'none';
   openModal(
-    'Call recording, ' + who,
-    `<p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;line-height:1.6">Attach the recording of the health check so the next person can hear what the merchant actually said, rather than read a summary of it. You can add more than one file.</p>
-    <div class="form-group"><label>Files</label><div id="rc-list"></div>
+    'Health check evidence, ' + who,
+    `<p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;line-height:1.6">Show that the health check happened: paste a link to the recording (Google Drive, Zoom, Crisp), or attach a file, or both. ${mgr ? '' : esc(MANAGERS[0]) + ' reviews it together with your incentive claim.'}</p>
+    ${recStatusBanner(r)}
+    <div class="form-group"><label>Link to the recording</label>
+      <input id="rc-url" value="${esc(r.url)}" placeholder="Google Drive, Zoom, Crisp, wherever it lives">
+      <p style="font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.5">Make sure the link is shared so ${esc(MANAGERS[0])} can open it.</p></div>
+    <div class="form-group"><label>Attachments (image, PDF, audio or video)</label><div id="rc-list"></div>
       <label class="drop" style="display:block;text-align:center;padding:14px;margin-top:9px">
-        Choose a file to add, or several at once
-        <input id="rc-file" type="file" accept="audio/*,video/*" multiple style="display:none" onchange="recAddFiles()"></label>
-      <p style="font-size:11px;color:var(--muted);margin:8px 0 0;line-height:1.5">Files are kept in this browser so they can be played and downloaded. They do not leave your machine, so a shared link is still how a colleague gets to one.</p></div>
-    <div class="form-group"><label>Link to the recording (optional)</label>
-      <input id="rc-url" value="${esc(r.url)}" placeholder="Google Drive, Zoom, Crisp, wherever it lives"></div>
+        Choose files, up to ${REC_MAX_MB} MB each
+        <input id="rc-file" type="file" accept="image/*,application/pdf,audio/*,video/*" multiple style="display:none" onchange="recAddFiles('${jsAttr(key)}')"></label></div>
     <div class="form-group"><label>One line on what came out of it</label>
       <input id="rc-note" value="${esc(r.note)}" placeholder="e.g. shipping rates are the blocker; wants a call back after 11.11"></div>
+    ${mgr && has ? `<div class="form-group" style="border-top:1px solid var(--line);padding-top:14px"><label>Your review</label>
+      <input id="rc-review-note" value="" placeholder="Optional when approving. Required when sending back: what needs fixing?">
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-green" onclick="reviewRec('${jsAttr(key)}','approved')">Approve</button>
+        <button class="btn btn-ghost" style="color:var(--pink)" onclick="reviewRec('${jsAttr(key)}','rejected')">Send back</button></div></div>` : ''}
     <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
-      ${recFiles(r).length || r.url ? `<button class="btn btn-ghost" style="color:var(--pink)" onclick="dropRec('${key}')">Remove all</button>` : ''}
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-green" onclick="saveRec('${key}')">Save</button></div>`
+      ${has ? `<button class="btn btn-ghost" style="color:var(--pink)" onclick="dropRec('${jsAttr(key)}')">Remove all</button>` : ''}
+      <button class="btn btn-ghost" onclick="recLeave()">Cancel</button>
+      <button id="rc-save" class="btn btn-navy" onclick="saveRec('${jsAttr(key)}','${jsAttr(who)}')">Save</button></div>`
   );
   drawRecList(key);
 }
 function fileLine(name, size, mins, extra) {
-  return `<b style="color:var(--navy)">${esc(name)}</b> <span class="ms">${size ? (size / 1048576).toFixed(1) + ' MB' : ''}${mins ? ' · ' + mins + ' min' : ''}${extra || ''}</span>`;
+  return `<b style="color:var(--navy)">${esc(name)}</b> <span class="ms">${size ? (size >= 1048576 ? (size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(size / 1024)) + ' KB') : ''}${mins ? ' · ' + mins + ' min' : ''}${extra || ''}</span>`;
 }
 function drawRecList(key) {
   const el = document.getElementById('rc-list'); if (!el) return;
-  const saved = recFiles(getRecs()[key]);
-  if (!saved.length && !_recPending.length) {
-    el.innerHTML = '<div class="blocked">No files attached yet.</div>';
+  const r = getRecs()[key];
+  const docs = recDocs(r), legacy = recFiles(r);
+  if (!docs.length && !legacy.length && !_recPending.length) {
+    el.innerHTML = '<div class="blocked">Nothing attached yet.</div>';
     return;
   }
   el.innerHTML =
-    saved.map(f => `<div class="brow2" style="border:1px solid var(--line);border-radius:9px;margin-bottom:6px;padding:8px 11px">
-        <span style="flex:1">${fileLine(f.name, f.size, f.mins, f.stored ? (f.playable === false ? ' · download only' : '') : ' · details only')}</span>
+    docs.map(f => `<div class="brow2" style="border:1px solid var(--line);border-radius:9px;margin-bottom:6px;padding:8px 11px">
+        <span style="flex:1">${fileLine(f.name, f.size, 0, '')}</span>
+        <button class="btn btn-xs btn-wa" onclick="openRecDoc('${jsAttr(f.id)}')">${/^(audio|video)\//.test(f.type || '') ? 'Play' : 'View'}</button>
+        <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="dropRecDoc('${jsAttr(key)}','${jsAttr(f.id)}')">Remove</button>
+      </div>`).join('') +
+    legacy.map(f => `<div class="brow2" style="border:1px solid var(--line);border-radius:9px;margin-bottom:6px;padding:8px 11px">
+        <span style="flex:1">${fileLine(f.name, f.size, f.mins, f.stored ? (f.playable === false ? ' · older upload, download only' : ' · older upload') : ' · older upload, file not held here')}</span>
         ${f.stored
           ? f.playable === false
-            ? `<button class="btn btn-xs btn-ghost" onclick="downloadRec('${key}','${f.id}')">Download</button>`
-            : `<button class="btn btn-xs btn-wa" onclick="playRec('${key}','${f.id}')">Play</button>`
+            ? `<button class="btn btn-xs btn-ghost" onclick="downloadRec('${jsAttr(key)}','${jsAttr(f.id)}')">Download</button>`
+            : `<button class="btn btn-xs btn-wa" onclick="playRec('${jsAttr(key)}','${jsAttr(f.id)}')">Play</button>`
           : ''}
-        <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="dropRecFile('${key}','${f.id}')">Remove</button>
+        <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="dropRecFile('${jsAttr(key)}','${jsAttr(f.id)}')">Remove</button>
       </div>`).join('') +
     _recPending.map((f, i) => `<div class="brow2" style="border:1px dashed var(--blue-mid);border-radius:9px;margin-bottom:6px;padding:8px 11px;background:#F7FAFF">
-        <span style="flex:1">${fileLine(f.name, f.size, f.mins, ' · not saved yet' + (f.playable === false ? ', download only in this browser' : ''))}</span>
-        <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="dropPending(${i},'${key}')">Remove</button>
+        <span style="flex:1">${fileLine(f.name, f.size, 0, ' · not saved yet')}</span>
+        <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="dropPending(${i},'${jsAttr(key)}')">Remove</button>
       </div>`).join('');
 }
-function recAddFiles() {
+async function recAddFiles(key) {
   const inp = document.getElementById('rc-file');
-  [...inp.files].forEach(f => {
-    const entry = { file: f, name: f.name, size: f.size, type: f.type, id: uuid() };
-    entry.playable = !!canPlayFile(entry, f);
-    _recPending.push(entry);
-    try {
-      const a = document.createElement('audio');
-      a.preload = 'metadata';
-      a.onloadedmetadata = () => {
-        if (isFinite(a.duration)) { entry.mins = Math.round(a.duration / 60); drawRecList(inp.dataset.key || ''); }
-        URL.revokeObjectURL(a.src);
-      };
-      a.src = URL.createObjectURL(f);
-    } catch (e) {}
-  });
+  const files = [...inp.files];
   inp.value = '';
-  const key = (document.querySelector('#modal-body .btn-green').getAttribute('onclick') || '').match(/saveRec\('([^']+)'/);
-  drawRecList(key ? key[1] : '');
+  for (const f of files) {
+    try { _recPending.push(await readAttach(f)); }
+    catch (msg) { alert(msg); }
+  }
+  drawRecList(key);
 }
 function dropPending(i, key) { _recPending.splice(i, 1); drawRecList(key); }
-function saveRec(key) {
+async function saveRec(key, who) {
   const url = document.getElementById('rc-url').value.trim();
   const note = document.getElementById('rc-note').value.trim();
   const prev = getRecs()[key] || {};
-  const existing = recFiles(prev);
-  if (!url && !existing.length && !_recPending.length) {
-    alert('Add the recording file, or paste a link to it.');
+  const docs = recDocs(prev).slice();
+  if (!url && !recFiles(prev).length && !docs.length && !_recPending.length) {
+    alert('Paste a link to the recording, or attach a file.');
     return;
   }
-  const pending = _recPending.slice();
-  Promise.all(pending.map(f => mediaPut('rec:' + key + ':' + f.id, f.file).then(ok => ({ id: f.id, name: f.name, size: f.size, type: f.type, mins: f.mins, stored: !!ok }))))
-    .then(added => {
-      pending.forEach((f, i) => (added[i].playable = f.playable));
-      const recs = getRecs();
-      recs[key] = { url, note, at: new Date().toISOString(), by: myAM || '', files: existing.concat(added) };
-      setRecs(recs);
-      _recPending = [];
-      closeModal();
-      render();
-      const lost = added.filter(f => !f.stored).length;
-      if (lost) alert(lost + ' file(s) could not be stored in this browser, so only their details were kept. Paste a shared link so somebody else can open them.');
-    });
+  if (url && !/^https?:\/\//i.test(url)) { alert('That link should start with https://'); return; }
+  const btn = document.getElementById('rc-save');
+  const label = btn ? btn.textContent : 'Save';
+  if (btn) btn.disabled = true;
+  for (const f of _recPending) {
+    const err = await uploadRecFile(f, key, (i, n) => { if (btn) btn.textContent = 'Uploading ' + f.name.slice(0, 18) + (n > 1 ? ' (' + i + ' of ' + n + ')' : '') + '…'; });
+    if (err) {
+      alert('Could not upload ' + f.name + '. ' + err);
+      if (btn) { btn.textContent = label; btn.disabled = false; }
+      return;
+    }
+    docs.push({ id: f.id, name: f.name, type: f.type, size: f.size });
+  }
+  const mgr = isManager();
+  const now = new Date().toISOString();
+  const recs = getRecs();
+  const rec = {
+    ...prev, url, note, at: now, merchant: who || prev.merchant || '', docs, files: recFiles(prev),
+    by: (mgr && prev.by) ? prev.by : (myAM || ''),
+  };
+  if (mgr) Object.assign(rec, { status: 'approved', reviewedBy: myAM || MANAGERS[0], reviewedAt: now, reviewNote: '' });
+  else Object.assign(rec, { status: 'attached', reviewedBy: '', reviewedAt: '', reviewNote: '' });
+  recs[key] = rec;
+  setRecs(recs);
+  _recPending = [];
+  closeModal();
+  render();
+  showToast(mgr ? 'Saved and approved.' : 'Saved. It counts now, and ' + MANAGERS[0] + ' reviews it with your claim.');
+}
+function reviewRec(key, decision) {
+  if (!isManager()) return;
+  const recs = getRecs(), r = recs[key];
+  if (!r) return;
+  const noteEl = document.getElementById('rc-review-note');
+  const note = noteEl ? noteEl.value.trim() : '';
+  if (decision === 'rejected' && !note) { alert('Say briefly what needs fixing, so they know what to send back.'); return; }
+  recs[key] = { ...r, status: decision, reviewedBy: myAM || MANAGERS[0], reviewedAt: new Date().toISOString(), reviewNote: note };
+  setRecs(recs);
+  const owner = recOwner(key);
+  if (owner && canonAM(owner) !== canonAM(myAM)) {
+    notify(owner, decision === 'approved'
+      ? `${canonAM(myAM)} approved your health check evidence for ${recMerchant(key)}.`
+      : `${canonAM(myAM)} sent back your health check evidence for ${recMerchant(key)}: ${note}`, 'performance');
+  }
+  showToast(decision === 'approved' ? 'Approved.' : 'Sent back.');
+  render();
+  recLeave();
+}
+async function openRecDoc(id) {
+  let meta;
+  try {
+    const res = await fetch('/api/recording-files/' + encodeURIComponent(id));
+    meta = await res.json();
+    if (!res.ok) { alert(meta.error || 'Could not open that file.'); return; }
+  } catch (e) { alert('Could not open that file. Check your connection.'); return; }
+  const parts = [];
+  const decode = b64 => { const bin = atob(b64), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); return bytes; };
+  try {
+    if ((meta.chunks || 1) > 1) {
+      for (let i = 0; i < meta.chunks; i++) {
+        const r2 = await fetch('/api/recording-files/' + encodeURIComponent(id) + '?chunk=' + i);
+        const d2 = await r2.json();
+        if (!r2.ok) { alert(d2.error || 'Part of that file could not be loaded.'); return; }
+        parts.push(decode(d2.data));
+      }
+    } else parts.push(decode(meta.data));
+  } catch (e) { alert('Could not open that file. Check your connection.'); return; }
+  const type = meta.type || 'application/octet-stream';
+  const u = URL.createObjectURL(new Blob(parts, { type }));
+  const name = esc(meta.name || 'file');
+  const foot = `<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
+      <a class="btn btn-ghost" href="${u}" download="${name}">Download</a>
+      <button class="btn btn-navy" onclick="closeModal()">Close</button></div>`;
+  let body;
+  if (/^image\//.test(type)) body = `<img src="${u}" alt="${name}" style="max-width:100%;border-radius:10px;border:1px solid var(--line)">`;
+  else if (type === 'application/pdf') body = `<iframe src="${u}" style="width:100%;height:60vh;border:1px solid var(--line);border-radius:10px"></iframe>`;
+  else {
+    const vid = /^video\//.test(type) || /\.(mp4|mov|m4v|webm)$/i.test(meta.name || '');
+    const can = canPlayFile({ type, name: meta.name }, null);
+    body = can === '' && type
+      ? cannotPlayHtml({ name: meta.name, type })
+      : vid ? `<video controls playsinline src="${u}" style="width:100%;border-radius:10px;background:#000"></video>`
+            : `<audio controls src="${u}" style="width:100%"></audio>`;
+  }
+  openModal(name, body + foot, 'wide');
+}
+function recChanged(key, rec) {
+  /* Any edit by an account manager puts the evidence back to "attached" for
+     a fresh review; the server enforces this too. A manager's own edit stays
+     as it was. */
+  return isManager() ? rec : { ...rec, status: 'attached', reviewedBy: '', reviewedAt: '', reviewNote: '' };
+}
+function dropRecDoc(key, id) {
+  const recs = getRecs(), r = recs[key]; if (!r) return;
+  const docs = recDocs(r).filter(f => f.id !== id);
+  fetch('/api/recording-files/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
+  if (!docs.length && !recFiles(r).length && !r.url) { delete recs[key]; setRecs(recs); closeModal(); render(); return; }
+  recs[key] = recChanged(key, { ...r, docs });
+  setRecs(recs);
+  render();
+  if (modalOpen() && document.getElementById('rc-list')) drawRecList(key);
 }
 function dropRecFile(key, id) {
   const recs = getRecs(), r = recs[key]; if (!r) return;
   const files = recFiles(r).filter(f => f.id !== id);
   mediaDel(id === '0' ? 'rec:' + key : 'rec:' + key + ':' + id);
-  if (!files.length && !r.url) { delete recs[key]; setRecs(recs); closeModal(); render(); return; }
-  recs[key] = { ...r, files, name: undefined, stored: undefined };
+  if (!files.length && !recDocs(r).length && !r.url) { delete recs[key]; setRecs(recs); closeModal(); render(); return; }
+  recs[key] = recChanged(key, { ...r, files, name: undefined, stored: undefined });
   setRecs(recs);
   render();
   if (modalOpen() && document.getElementById('rc-list')) drawRecList(key);
 }
 function dropRec(key) {
-  if (!confirm('Remove this recording and every file on it? The card goes back to needing one.')) return;
+  if (!confirm('Remove this evidence and every file on it? The health check goes back to needing evidence.')) return;
   const recs = getRecs(), r = recs[key];
-  if (r) recFiles(r).forEach(f => mediaDel(mediaKeyFor(key, f)));
+  if (r) {
+    recFiles(r).forEach(f => mediaDel(mediaKeyFor(key, f)));
+    recDocs(r).forEach(f => fetch('/api/recording-files/' + encodeURIComponent(f.id), { method: 'DELETE' }).catch(() => {}));
+  }
   delete recs[key];
   setRecs(recs);
   _recPending = [];
@@ -13768,29 +14177,22 @@ function playRec(key, id) {
 function recBlock(key, who, done) {
   if (!done) return '';
   const r = getRecs()[key];
-  const files = recFiles(r);
+  const s = recStatus(r);
   const edit = `askRec('${key}','${jsAttr(who)}')`;
-  return `<div class="recbox"><div class="rl">Call recording</div>
-    ${r && (files.length || r.url)
-      ? `${files.map(f => `<div class="brow2" style="border-bottom:1px solid var(--line);padding:7px 0">
-             <span style="flex:1">${fileLine(f.name, f.size, f.mins, f.stored ? (f.playable === false ? ' · ' + fileExt(f.name) + ', download only in this browser' : '') : ' · details only, the file is not held here')}</span>
-             ${f.stored
-               ? f.playable === false
-                 ? `<button class="btn btn-xs btn-ghost" onclick="downloadRec('${key}','${f.id}')">Download</button>`
-                 : `<button class="btn btn-xs btn-wa" onclick="playRec('${key}','${f.id}')">Play</button>`
-               : ''}
-             <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="dropRecFile('${key}','${f.id}')">Remove</button>
-           </div>`).join('')}
-         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:9px">
-           <span class="pill">${files.length ? files.length + ' file' + (files.length > 1 ? 's' : '') : 'Link only'}</span>
+  const n = recDocs(r).length + recFiles(r).length;
+  return `<div class="recbox"><div class="rl">Health check evidence</div>
+    ${s !== 'none'
+      ? `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+           ${recStatusChip(r)}
            ${r.url ? `<a class="btn btn-xs btn-mail" href="${esc(r.url)}" target="_blank" rel="noopener">Open link</a>` : ''}
+           ${n ? `<span class="pill">${n} attachment${n === 1 ? '' : 's'}</span>` : ''}
            <span style="flex:1"></span>
-           <button class="btn btn-xs btn-ghost" onclick="${edit}">Add file</button>
-           <button class="btn btn-xs btn-ghost" style="color:var(--pink)" onclick="dropRec('${key}')">Remove all</button></div>
+           <button class="btn btn-xs btn-ghost" onclick="${edit}">${isManager() ? 'Review' : 'Edit'}</button></div>
+         ${s === 'rejected' ? `<p style="font-size:12px;color:var(--pink);margin-top:8px;line-height:1.55">Sent back: ${esc(r.reviewNote || 'no reason given')}</p>` : ''}
          ${r.note ? `<p style="font-size:12px;color:var(--body);margin-top:8px;line-height:1.55">${esc(r.note)}</p>` : ''}`
       : `<div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
-           <span style="font-size:11.5px;color:var(--pink);font-weight:600">Recording needed before this counts as done</span>
-           <button class="btn btn-xs btn-wa" onclick="${edit}">Attach recording</button></div>`}
+           <span style="font-size:11.5px;color:var(--pink);font-weight:600">Evidence needed before this counts as done</span>
+           <button class="btn btn-xs btn-wa" onclick="${edit}">Attach evidence</button></div>`}
   </div>`;
 }
 
@@ -14098,7 +14500,6 @@ const NAV = [
       kids: [
         { id: 'reports-overview', label: 'Overview' },
         { id: 'performance', label: 'My performance' },
-        { id: 'reports-activation', label: 'Activation' },
         { id: 'reports-churn', label: 'Churn' },
         { id: 'reports-upgrade', label: 'Upgrade' },
       ],
@@ -14115,7 +14516,6 @@ const NAV = [
   ],
   [
     { id: 'merchants', label: 'Merchants', badge: 'b-mer' },
-    { id: 'activation', label: 'Activation' },
     {
       id: 'retention',
       label: 'Retention',
@@ -14425,7 +14825,7 @@ async function pollLiveData() {
     await Promise.all([
       loadUpgrades(), loadTimeOff(), loadCampaignActivities(),
       loadCampaignContacts(), loadEscalations(), loadProofs(), loadRecs(),
-      loadNotifications(),
+      loadNotifications(), loadBhc(),
     ]);
     render();
   } catch (e) {}
@@ -14441,7 +14841,7 @@ async function refreshLiveData(btnId) {
     await Promise.all([
       loadUpgrades(), loadTimeOff(), loadCampaignActivities(),
       loadCampaignContacts(), loadEscalations(), loadProofs(), loadRecs(),
-      loadNotifications(),
+      loadNotifications(), loadBhc(),
     ]);
     render();
   } finally {
@@ -14477,8 +14877,10 @@ document.addEventListener('visibilitychange', function () {
     loadProofs(),
     loadRecs(),
     loadNotifications(),
+    loadBhc(),
   ]);
   loadLogsLocal();
+  migrateLocalBhc();
   migrateOrphanedProofsAndRecs();
   preLaunchReset();
   migrateAmiraRealStores();

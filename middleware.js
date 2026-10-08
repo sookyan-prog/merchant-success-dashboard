@@ -23,7 +23,23 @@ async function hasValidSession(req) {
 }
 
 export async function middleware(req) {
-  if (await hasValidSession(req)) return NextResponse.next();
+  if (await hasValidSession(req)) {
+    /* A page (as opposed to an API call, which checks for itself) is only
+       served if the account still exists - otherwise someone whose login was
+       removed could keep opening the dashboard on a cookie that has not
+       expired yet. Fails open if the check itself cannot be made. */
+    if (!req.nextUrl.pathname.startsWith('/api/')) {
+      try {
+        const r = await fetch(new URL('/api/auth/check', req.url), { headers: { cookie: req.headers.get('cookie') || '' } });
+        if (r.status === 401) {
+          const res = NextResponse.redirect(new URL('/login', req.url));
+          res.cookies.delete(SESSION_COOKIE);
+          return res;
+        }
+      } catch (e) {}
+    }
+    return NextResponse.next();
+  }
   /* API calls get a JSON 401 rather than an HTML redirect - the dashboard's
      own JS is what's calling these, not a browser navigation, so sending
      it a login page to parse would just look like a broken response. */
@@ -36,5 +52,5 @@ export async function middleware(req) {
 }
 
 export const config = {
-  matcher: ['/dashboard.html', '/admin/:path*', '/account/:path*', '/api/users/:path*', '/api/auth/change-password', '/api/console-retention/:path*', '/api/churn-stores/:path*', '/api/upgrades/:path*', '/api/time-off/:path*', '/api/campaign-activities/:path*', '/api/campaign-contacts/:path*', '/api/escalations/:path*', '/api/proofs/:path*', '/api/call-recordings/:path*', '/api/notifications/:path*'],
+  matcher: ['/dashboard.html', '/admin/:path*', '/account/:path*', '/api/users/:path*', '/api/auth/change-password', '/api/console-retention/:path*', '/api/churn-stores/:path*', '/api/upgrades/:path*', '/api/time-off/:path*', '/api/campaign-activities/:path*', '/api/campaign-contacts/:path*', '/api/escalations/:path*', '/api/proofs/:path*', '/api/call-recordings/:path*', '/api/notifications/:path*', '/api/bhc/:path*', '/api/recording-files/:path*'],
 };

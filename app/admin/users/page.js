@@ -7,6 +7,7 @@ export default function AdminUsersPage() {
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
   const [loading, setLoading] = useState(true);
+  const [meId, setMeId] = useState('');
 
   async function load() {
     const res = await fetch('/api/users');
@@ -21,7 +22,22 @@ export default function AdminUsersPage() {
   }
   useEffect(() => {
     load();
+    fetch('/api/auth/me').then((r) => r.json()).then((d) => setMeId((d.user && d.user.id) || '')).catch(() => {});
   }, []);
+
+  async function onRemove(u) {
+    if (!window.confirm(`Remove ${u.name}'s login (${u.email})? They will not be able to sign in any more. Everything they entered stays.`)) return;
+    setError('');
+    setOk('');
+    const res = await fetch('/api/users/' + u.id, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error || 'Could not remove that account.');
+      return;
+    }
+    setOk(`${u.name}'s login was removed. Any session they have open stops working within a minute.`);
+    load();
+  }
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -88,6 +104,7 @@ export default function AdminUsersPage() {
               <th style={{ padding: '6px 0' }}>Name</th>
               <th>Email</th>
               <th>Role</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -96,6 +113,17 @@ export default function AdminUsersPage() {
                 <td style={{ padding: '8px 0' }}>{u.name}</td>
                 <td>{u.email}</td>
                 <td style={{ textTransform: 'capitalize' }}>{u.role}</td>
+                <td style={{ textAlign: 'right' }}>
+                  {u.id !== meId ? (
+                    <button
+                      type="button"
+                      onClick={() => onRemove(u)}
+                      style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #F4C3D2', background: '#fff', color: '#D6336C', fontSize: 12, cursor: 'pointer' }}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </td>
               </tr>
             ))}
           </tbody>

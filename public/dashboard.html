@@ -7784,7 +7784,7 @@ function bhcDoneIn(person, mk) {
   const out = getData('bhc')
     .filter(r => canonAM(r['AM']) === person && inM(r['Session Date']) && ['completed', 'followup'].includes(r['Stage']))
     .map(r => ({
-      id: r['ID'], sid: String(r['Store ID'] || ''), merchant: r['Merchant'],
+      id: r['ID'], sid: String(r['Store ID'] || r['ID'] || ''), merchant: r['Merchant'], /* evidence is filed under Store ID, or the session ID when there is none (see recBlock on the Health check page) */
       date: r['Session Date'], follow: r['Next Follow Up'] || '',
       score: bhcScored(r) ? bhcTotal(r) : null, leak: r['Leakage'] || '',
       summarised: !!(r['Situation'] || r['Improvement'] || r['MerchantActions']),
@@ -11002,8 +11002,8 @@ function bhcParseSummary(text) {
 }
 
 function bhcSummaryBlock(r) {
-  const recKey = 'hc-' + (r['Store ID'] || '');
-  const hasRec = r['Store ID'] && getRecs()[recKey];
+  const recKey = 'hc-' + (r['Store ID'] || r['ID'] || '');
+  const hasRec = (r['Store ID'] || r['ID']) && getRecs()[recKey];
   return `<div class="blk"><h4>Turn the recording into the follow-up</h4>
     ${hasRec ? '' : `<div class="blocked" style="margin-bottom:9px">No recording attached yet. Attach one on the My day card, or paste a summary below anyway if you took notes.</div>`}
     <div class="script" id="bh-sumprompt" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;max-height:180px;overflow:auto">${esc(bhcSummaryPrompt(r))}</div>
@@ -14042,7 +14042,10 @@ async function recAddFiles(key) {
 }
 function dropPending(i, key) { _recPending.splice(i, 1); drawRecList(key); }
 async function saveRec(key, who) {
-  const url = document.getElementById('rc-url').value.trim();
+  let url = document.getElementById('rc-url').value.trim();
+  /* "drive.google.com/..." with no scheme would open as a broken relative link,
+     so add https:// ourselves instead of making people retype it. */
+  if (url && !/^[a-z][a-z0-9+.-]*:/i.test(url) && /^[^\s\/]+\.[^\s\/]+/.test(url) && !/\s/.test(url)) url = 'https://' + url.replace(/^\/+/, '');
   const note = document.getElementById('rc-note').value.trim();
   const prev = getRecs()[key] || {};
   const docs = recDocs(prev).slice();

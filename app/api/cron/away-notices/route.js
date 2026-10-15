@@ -36,8 +36,12 @@ import { postAwayNotice } from '../../../../lib/awayNotice';
 function checkSecret(req) {
   const want = process.env.CRON_SECRET;
   if (!want) return false;
+  /* Two ways in: the x-cron-secret header (manual runs, curl), and the
+     "Authorization: Bearer <CRON_SECRET>" header that Vercel Cron adds by
+     itself when the CRON_SECRET environment variable is set. */
   const got = req.headers.get('x-cron-secret');
-  return got === want;
+  const auth = req.headers.get('authorization') || '';
+  return got === want || auth === 'Bearer ' + want;
 }
 
 /* Malaysia is UTC+8 with no daylight saving, so this is a fixed offset,
